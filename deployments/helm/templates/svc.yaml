@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "deeb.fullname" . }}
+  labels:
+    {{- include "deeb.labels" . | nindent 4 }}
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+    targetPort: mysql
+  selector:
+    {{- include "deeb.selectorLabels" . | nindent 4 }}
