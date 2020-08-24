@@ -1,7 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/orishu/deeb/internal/storage"
+)
 
 func main() {
 	fmt.Println("Controller")
+	storage.Foo()
 }
