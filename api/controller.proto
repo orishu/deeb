@@ -1,0 +1,19 @@
+syntax="proto3";
+
+package api;
+
+service ControlService {
+    rpc Status(StatusRequest) returns (StatusResponse) {}
+}
+
+enum StatusCode {
+    OK = 0;
+    ERROR = 1;
+}
+
+message StatusResponse {
+    StatusCode code = 1;
+}
+
+message StatusRequest {
+}
