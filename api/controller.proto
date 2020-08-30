@@ -2,8 +2,41 @@ syntax="proto3";
 
 package api;
 
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-swagger/options/annotations.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+
+option go_package = "github.com/orishu/deeb/api;controller";
+
+option (grpc.gateway.protoc_gen_swagger.options.openapiv2_swagger) = {
+  info: {
+    version: "1.0";
+  };
+  schemes: HTTPS;
+};
+
+// Enable custom Marshal method.
+option (gogoproto.marshaler_all) = true;
+// Enable custom Unmarshal method.
+option (gogoproto.unmarshaler_all) = true;
+// Enable custom Size method (Required by Marshal and Unmarshal).
+option (gogoproto.sizer_all) = true;
+// Enable registration with golang/protobuf for the grpc-gateway.
+option (gogoproto.goproto_registration) = true;
+// Enable generation of XXX_MessageName methods for grpc-go/status.
+option (gogoproto.messagename_all) = true;
+
 service ControlService {
-    rpc Status(StatusRequest) returns (StatusResponse) {}
+    rpc Status(google.protobuf.Empty) returns (StatusResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/status"
+        };
+    }
 }
 
 enum StatusCode {
@@ -13,7 +46,4 @@ enum StatusCode {
 
 message StatusResponse {
     StatusCode code = 1;
-}
-
-message StatusRequest {
 }
