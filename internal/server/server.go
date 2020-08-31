@@ -12,7 +12,6 @@ import (
 	"os"
 
 	"github.com/gogo/gateway"
-	"github.com/gogo/protobuf/types"
 	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	pb "github.com/orishu/deeb/api"
@@ -40,14 +39,6 @@ type Server struct {
 	grpcServer *grpc.Server
 	httpServer *http.Server
 	httpMux    *http.ServeMux
-}
-
-type controlService struct {
-}
-
-func (c controlService) Status(context.Context, *types.Empty) (*pb.StatusResponse, error) {
-	resp := pb.StatusResponse{Code: pb.StatusCode_OK}
-	return &resp, nil
 }
 
 // New creates a new combined gRPC and HTTP server
