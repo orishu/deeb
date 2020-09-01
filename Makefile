@@ -20,6 +20,8 @@ generate:
 		-I api \
 		-I vendor/github.com/grpc-ecosystem/grpc-gateway/ \
 		-I vendor/github.com/gogo/googleapis/ \
+		-I vendor/github.com/gogo/protobuf/ \
+		-I vendor/github.com/coreos/etcd/raft/ \
 		-I vendor/ \
 		--gogo_out=plugins=grpc,paths=source_relative,\
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\

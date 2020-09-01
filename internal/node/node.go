@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -40,7 +41,7 @@ func (n *Node) Start() {
 	peers := []raft.Peer{{ID: n.config.ID}}
 	n.raftNode = raft.StartNode(&n.config, peers)
 
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -49,7 +50,7 @@ func (n *Node) Start() {
 			n.raftNode.Tick()
 		case rd := <-n.raftNode.Ready():
 			n.saveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
-			//      send(rd.Messages)
+			sendMessages(rd.Messages)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				////        processSnapshot(rd.Snapshot)
 			}
@@ -71,6 +72,13 @@ func (n *Node) Start() {
 // Stop stops the main Raft loop
 func (n *Node) Stop() {
 	n.done <- true
+}
+
+func sendMessages(messages []raftpb.Message) {
+}
+
+func (n *Node) HandleRaftRPC(ctx context.Context, m raftpb.Message) {
+	_ = n.raftNode.Step(ctx, m)
 }
 
 func (n *Node) saveToStorage(hardState raftpb.HardState, entries []raftpb.Entry, snap raftpb.Snapshot) {

@@ -21,7 +21,7 @@ func main() {
 	n := node.New()
 	storage.Foo()
 
-	srv := server.New()
+	srv := server.New(n)
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {

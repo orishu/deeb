@@ -16,6 +16,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/insecure"
+	nd "github.com/orishu/deeb/internal/node"
 	"github.com/rakyll/statik/fs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -36,13 +37,14 @@ func init() {
 
 // Server is the gRPC and HTTP server
 type Server struct {
+	node       *nd.Node
 	grpcServer *grpc.Server
 	httpServer *http.Server
 	httpMux    *http.ServeMux
 }
 
 // New creates a new combined gRPC and HTTP server
-func New() *Server {
+func New(node *nd.Node) *Server {
 	grpcServer := grpc.NewServer(
 		grpc.Creds(credentials.NewServerTLSFromCert(&insecure.Cert)),
 		grpc.UnaryInterceptor(grpc_validator.UnaryServerInterceptor()),
@@ -51,9 +53,13 @@ func New() *Server {
 
 	cservice := controlService{}
 	pb.RegisterControlServiceServer(grpcServer, &cservice)
+	rservice := raftService{node: node}
+	pb.RegisterRaftServer(grpcServer, &rservice)
+
 	mux := http.NewServeMux()
 
 	return &Server{
+		node:       node,
 		grpcServer: grpcServer,
 		httpServer: &http.Server{
 			Addr: fmt.Sprintf("localhost:%d", *gatewayPort),
