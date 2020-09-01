@@ -15,20 +15,11 @@ import (
 	_ "github.com/orishu/deeb/internal/statik"
 )
 
-// TODO: integrate this with main()
-func main1() {
-	fmt.Println("Controller")
-	storage.Foo()
-	n := node.New()
-	go func() {
-		n.Start()
-	}()
-	n.Stop()
-}
-
 func main() {
 	flag.Parse()
 	ctx := context.Background()
+	n := node.New()
+	storage.Foo()
 
 	srv := server.New()
 	c := make(chan os.Signal)
@@ -41,6 +32,10 @@ func main() {
 			fmt.Printf("stopping error: %+v\n", err)
 			os.Exit(1)
 		}
+		n.Stop()
+	}()
+	go func() {
+		n.Start()
 	}()
 	srv.Start(ctx)
 }
