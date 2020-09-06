@@ -53,7 +53,7 @@ func New(node *nd.Node, params ServerParams) *Server {
 		grpc.StreamInterceptor(grpc_validator.StreamServerInterceptor()),
 	)
 
-	cservice := controlService{}
+	cservice := controlService{node: node}
 	pb.RegisterControlServiceServer(grpcServer, &cservice)
 	rservice := raftService{node: node}
 	pb.RegisterRaftServer(grpcServer, &rservice)

@@ -15,10 +15,10 @@ import "github.com/coreos/etcd/raft/raftpb/raft.proto";
 option go_package = "github.com/orishu/deeb/api;controller";
 
 option (grpc.gateway.protoc_gen_swagger.options.openapiv2_swagger) = {
-  info: {
-    version: "1.0";
-  };
-  schemes: HTTPS;
+	info: {
+		version: "1.0";
+	};
+	schemes: HTTPS;
 };
 
 // Enable custom Marshal method.
@@ -33,22 +33,35 @@ option (gogoproto.goproto_registration) = true;
 option (gogoproto.messagename_all) = true;
 
 service ControlService {
-    rpc Status(google.protobuf.Empty) returns (StatusResponse) {
-        option (google.api.http) = {
-            get: "/api/v1/status"
-        };
-    }
+	rpc Status(google.protobuf.Empty) returns (StatusResponse) {
+		option (google.api.http) = {
+			get: "/api/v1/status"
+		};
+	}
+
+	rpc AddPeer(AddPeerRequest) returns (google.protobuf.Empty) {
+		option (google.api.http) = {
+			post: "/api/v1/peers"
+			body: "*"
+		};
+	}
 }
 
 service Raft {
-    rpc Message(raftpb.Message) returns (google.protobuf.Empty);
+	rpc Message(raftpb.Message) returns (google.protobuf.Empty);
 }
 
 enum StatusCode {
-    OK = 0;
-    ERROR = 1;
+	OK = 0;
+	ERROR = 1;
 }
 
 message StatusResponse {
-    StatusCode code = 1;
+	StatusCode code = 1;
 }
+
+message AddPeerRequest {
+	uint64 id = 1;
+	string addr = 2;
+	string port = 3;
+};

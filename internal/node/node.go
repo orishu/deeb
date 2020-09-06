@@ -18,6 +18,11 @@ type Node struct {
 	peerManager *client.PeerManager
 }
 
+type nodeMetadata struct {
+	Addr string `json:"addr"`
+	Port string `json:"port"`
+}
+
 // New creates new single-node RaftCluster
 func New(nodeID uint64) *Node {
 	storage := raft.NewMemoryStorage()
@@ -57,7 +62,7 @@ func (n *Node) Start(ctx context.Context, newCluster bool) {
 			n.raftNode.Tick()
 		case rd := <-n.raftNode.Ready():
 			n.saveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
-			_ = n.sendMessages(ctx, rd.Messages)
+			n.sendMessages(ctx, rd.Messages)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				////        processSnapshot(rd.Snapshot)
 			}
@@ -82,20 +87,18 @@ func (n *Node) Stop() {
 	n.done <- true
 }
 
-func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) error {
-	var err error
+func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 	for _, m := range messages {
 		c := n.peerManager.ClientForPeer(m.To)
 		if c == nil {
 			continue
 		}
 		m := m
-		_, e := c.RaftClient.Message(ctx, &m)
-		if e != nil && err == nil {
-			err = e
+		_, err := c.RaftClient.Message(ctx, &m)
+		if err != nil {
+			n.raftNode.ReportUnreachable(m.To)
 		}
 	}
-	return err
 }
 
 func (n *Node) HandleRaftRPC(ctx context.Context, m raftpb.Message) {

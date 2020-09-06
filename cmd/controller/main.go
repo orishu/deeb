@@ -4,10 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/etcd-io/etcd/raft"
 	"github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
 	"github.com/orishu/deeb/internal/storage"
@@ -21,6 +23,11 @@ func main() {
 	gRPCPort := flag.String("port", "10000", "The gRPC server port")
 	gatewayPort := flag.String("gwport", "11000", "The gRPC-Gateway server port")
 	nodeID := flag.Uint64("id", 1, "The node ID")
+
+	raftLogger := &raft.DefaultLogger{Logger: log.New(os.Stderr, "raft", log.LstdFlags)}
+	//raftLogger := &raft.DefaultLogger{Logger: log.New(ioutil.Discard, "", 0)}
+	raftLogger.EnableDebug()
+	raft.SetLogger(raftLogger)
 
 	flag.Parse()
 
