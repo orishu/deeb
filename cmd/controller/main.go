@@ -16,12 +16,22 @@ import (
 )
 
 func main() {
+	isNewCluster := flag.Bool("n", false, "Start up a new cluster")
+	host := flag.String("host", "localhost", "The address to bind to")
+	gRPCPort := flag.String("port", "10000", "The gRPC server port")
+	gatewayPort := flag.String("gwport", "11000", "The gRPC-Gateway server port")
+	nodeID := flag.Uint64("id", 1, "The node ID")
+
 	flag.Parse()
+
 	ctx := context.Background()
-	n := node.New()
+	n := node.New(*nodeID)
 	storage.Foo()
 
-	srv := server.New(n)
+	srv := server.New(
+		n,
+		server.ServerParams{Addr: *host, Port: *gRPCPort, GatewayPort: *gatewayPort},
+	)
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -35,7 +45,7 @@ func main() {
 		n.Stop()
 	}()
 	go func() {
-		n.Start()
+		n.Start(ctx, *isNewCluster)
 	}()
 	srv.Start(ctx)
 }

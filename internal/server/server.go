@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"mime"
@@ -23,11 +22,6 @@ import (
 	"google.golang.org/grpc/grpclog"
 )
 
-var (
-	gRPCPort    = flag.Int("grpc-port", 10000, "The gRPC server port")
-	gatewayPort = flag.Int("gateway-port", 11000, "The gRPC-Gateway server port")
-)
-
 var log grpclog.LoggerV2
 
 func init() {
@@ -35,8 +29,16 @@ func init() {
 	grpclog.SetLoggerV2(log)
 }
 
+// ServerParams is the group of parameters for the gRPC/HTTP server.
+type ServerParams struct {
+	Addr        string
+	Port        string
+	GatewayPort string
+}
+
 // Server is the gRPC and HTTP server
 type Server struct {
+	params     ServerParams
 	node       *nd.Node
 	grpcServer *grpc.Server
 	httpServer *http.Server
@@ -44,7 +46,7 @@ type Server struct {
 }
 
 // New creates a new combined gRPC and HTTP server
-func New(node *nd.Node) *Server {
+func New(node *nd.Node, params ServerParams) *Server {
 	grpcServer := grpc.NewServer(
 		grpc.Creds(credentials.NewServerTLSFromCert(&insecure.Cert)),
 		grpc.UnaryInterceptor(grpc_validator.UnaryServerInterceptor()),
@@ -60,9 +62,10 @@ func New(node *nd.Node) *Server {
 
 	return &Server{
 		node:       node,
+		params:     params,
 		grpcServer: grpcServer,
 		httpServer: &http.Server{
-			Addr: fmt.Sprintf("localhost:%d", *gatewayPort),
+			Addr: fmt.Sprintf("%s:%s", params.Addr, params.GatewayPort),
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{insecure.Cert},
 			},
@@ -80,7 +83,7 @@ func (s *Server) Start(ctx context.Context) {
 		OrigName:     true,
 	}
 
-	addr := fmt.Sprintf("localhost:%d", *gRPCPort)
+	addr := fmt.Sprintf("%s:%s", s.params.Addr, s.params.Port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalln("Failed to listen:", err)

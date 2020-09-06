@@ -10,7 +10,7 @@ import "google/api/annotations.proto";
 import "protoc-gen-swagger/options/annotations.proto";
 import "gogoproto/gogo.proto";
 import "github.com/mwitkow/go-proto-validators/validator.proto";
-import "raftpb/raft.proto";
+import "github.com/coreos/etcd/raft/raftpb/raft.proto";
 
 option go_package = "github.com/orishu/deeb/api;controller";
 

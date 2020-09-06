@@ -6,22 +6,24 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
+	"github.com/orishu/deeb/internal/client"
 )
 
 // Node is the object encapsulating the Raft node.
 type Node struct {
-	config   raft.Config
-	raftNode raft.Node
-	storage  *raft.MemoryStorage
-	done     chan bool
+	config      raft.Config
+	raftNode    raft.Node
+	storage     *raft.MemoryStorage
+	done        chan bool
+	peerManager *client.PeerManager
 }
 
 // New creates new single-node RaftCluster
-func New() *Node {
+func New(nodeID uint64) *Node {
 	storage := raft.NewMemoryStorage()
 
 	c := raft.Config{
-		ID:              0x01,
+		ID:              nodeID,
 		ElectionTick:    10,
 		HeartbeatTick:   1,
 		Storage:         storage,
@@ -30,27 +32,32 @@ func New() *Node {
 	}
 
 	return &Node{
-		config:  c,
-		storage: storage,
-		done:    make(chan bool),
+		config:      c,
+		storage:     storage,
+		done:        make(chan bool),
+		peerManager: client.NewPeerManager(),
 	}
 }
 
 // Start runs the main Raft loop
-func (n *Node) Start() {
-	peers := []raft.Peer{{ID: n.config.ID}}
+func (n *Node) Start(ctx context.Context, newCluster bool) {
+	peers := []raft.Peer{}
+	if newCluster {
+		peers = append(peers, raft.Peer{ID: n.config.ID})
+	}
 	n.raftNode = raft.StartNode(&n.config, peers)
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	for {
+	isDone := false
+	for !isDone {
 		select {
 		case <-ticker.C:
 			n.raftNode.Tick()
 		case rd := <-n.raftNode.Ready():
 			n.saveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
-			sendMessages(rd.Messages)
+			_ = n.sendMessages(ctx, rd.Messages)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				////        processSnapshot(rd.Snapshot)
 			}
@@ -64,9 +71,10 @@ func (n *Node) Start() {
 			}
 			n.raftNode.Advance()
 		case <-n.done:
-			return
+			isDone = true
 		}
 	}
+	_ = n.peerManager.Close()
 }
 
 // Stop stops the main Raft loop
@@ -74,7 +82,20 @@ func (n *Node) Stop() {
 	n.done <- true
 }
 
-func sendMessages(messages []raftpb.Message) {
+func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) error {
+	var err error
+	for _, m := range messages {
+		c := n.peerManager.ClientForPeer(m.To)
+		if c == nil {
+			continue
+		}
+		m := m
+		_, e := c.RaftClient.Message(ctx, &m)
+		if e != nil && err == nil {
+			err = e
+		}
+	}
+	return err
 }
 
 func (n *Node) HandleRaftRPC(ctx context.Context, m raftpb.Message) {
