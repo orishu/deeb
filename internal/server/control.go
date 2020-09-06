@@ -18,6 +18,6 @@ func (c controlService) Status(context.Context, *types.Empty) (*pb.StatusRespons
 }
 
 func (c controlService) AddPeer(ctx context.Context, req *pb.AddPeerRequest) (*types.Empty, error) {
-	err := c.node.AddPeerNode(ctx, req.Id, req.Addr, req.Port)
+	err := c.node.AddNode(ctx, req.Id, nd.NodeInfo{Addr: req.Addr, Port: req.Port})
 	return &types.Empty{}, err
 }

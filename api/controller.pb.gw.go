@@ -84,6 +84,24 @@ func local_request_ControlService_AddPeer_0(ctx context.Context, marshaler runti
 
 }
 
+func request_Raft_GetID_0(ctx context.Context, marshaler runtime.Marshaler, client RaftClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq types.Empty
+	var metadata runtime.ServerMetadata
+
+	msg, err := client.GetID(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_Raft_GetID_0(ctx context.Context, marshaler runtime.Marshaler, server RaftServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq types.Empty
+	var metadata runtime.ServerMetadata
+
+	msg, err := server.GetID(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
 // RegisterControlServiceHandlerServer registers the http handlers for service ControlService to "mux".
 // UnaryRPC     :call ControlServiceServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -127,6 +145,35 @@ func RegisterControlServiceHandlerServer(ctx context.Context, mux *runtime.Serve
 		}
 
 		forward_ControlService_AddPeer_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	return nil
+}
+
+// RegisterRaftHandlerServer registers the http handlers for service Raft to "mux".
+// UnaryRPC     :call RaftServer directly.
+// StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
+// Note that using this registration option will cause many gRPC library features (such as grpc.SendHeader, etc) to stop working. Consider using RegisterRaftHandlerFromEndpoint instead.
+func RegisterRaftHandlerServer(ctx context.Context, mux *runtime.ServeMux, server RaftServer) error {
+
+	mux.Handle("GET", pattern_Raft_GetID_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_Raft_GetID_0(rctx, inboundMarshaler, server, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_Raft_GetID_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -224,4 +271,73 @@ var (
 	forward_ControlService_Status_0 = runtime.ForwardResponseMessage
 
 	forward_ControlService_AddPeer_0 = runtime.ForwardResponseMessage
+)
+
+// RegisterRaftHandlerFromEndpoint is same as RegisterRaftHandler but
+// automatically dials to "endpoint" and closes the connection when "ctx" gets done.
+func RegisterRaftHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
+	conn, err := grpc.Dial(endpoint, opts...)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			if cerr := conn.Close(); cerr != nil {
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
+			}
+			return
+		}
+		go func() {
+			<-ctx.Done()
+			if cerr := conn.Close(); cerr != nil {
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
+			}
+		}()
+	}()
+
+	return RegisterRaftHandler(ctx, mux, conn)
+}
+
+// RegisterRaftHandler registers the http handlers for service Raft to "mux".
+// The handlers forward requests to the grpc endpoint over "conn".
+func RegisterRaftHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
+	return RegisterRaftHandlerClient(ctx, mux, NewRaftClient(conn))
+}
+
+// RegisterRaftHandlerClient registers the http handlers for service Raft
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "RaftClient".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "RaftClient"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "RaftClient" to call the correct interceptors.
+func RegisterRaftHandlerClient(ctx context.Context, mux *runtime.ServeMux, client RaftClient) error {
+
+	mux.Handle("GET", pattern_Raft_GetID_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_Raft_GetID_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_Raft_GetID_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	return nil
+}
+
+var (
+	pattern_Raft_GetID_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v1", "raft", "id"}, "", runtime.AssumeColonVerbOpt(true)))
+)
+
+var (
+	forward_Raft_GetID_0 = runtime.ForwardResponseMessage
 )

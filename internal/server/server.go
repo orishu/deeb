@@ -119,7 +119,11 @@ func (s *Server) Start(ctx context.Context) {
 	)
 	err = pb.RegisterControlServiceHandler(ctx, gwmux, conn)
 	if err != nil {
-		log.Fatalln("Failed to register gateway:", err)
+		log.Fatalln("Failed to register control gateway:", err)
+	}
+	err = pb.RegisterRaftHandler(ctx, gwmux, conn)
+	if err != nil {
+		log.Fatalln("Failed to register raft gateway:", err)
 	}
 
 	s.httpMux.Handle("/", gwmux)

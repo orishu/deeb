@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"sync"
 )
 
@@ -27,17 +26,13 @@ type PeerManager struct {
 
 // NewPeerManager returns a new PeerManager.
 func NewPeerManager() *PeerManager {
-	return &PeerManager{}
+	return &PeerManager{
+		peerMap: map[uint64]Peer{},
+	}
 }
 
-// AddPeer adds a new peer to the set of manager peers.
-func (pm PeerManager) AddPeer(ctx context.Context, params PeerParams) error {
-	pm.mutex.RLock()
-	if _, ok := pm.peerMap[params.NodeID]; ok {
-		pm.mutex.Unlock()
-		return fmt.Errorf("peer ID already exists: %d", params.NodeID)
-	}
-	pm.mutex.RUnlock()
+// UpsertPeer upserts a new peer to the set of manager peers.
+func (pm PeerManager) UpsertPeer(ctx context.Context, params PeerParams) error {
 	c, err := newClient(ctx, params.Addr, params.Port)
 	if err != nil {
 		return err
@@ -45,15 +40,22 @@ func (pm PeerManager) AddPeer(ctx context.Context, params PeerParams) error {
 	p := Peer{client: c}
 	pm.mutex.Lock()
 	if _, ok := pm.peerMap[params.NodeID]; ok {
-		// Handle an unlikely race that a peer with the same ID was
-		// added in between the two lock sessions.
-		pm.mutex.Unlock()
-		_ = p.close()
-		return fmt.Errorf("peer ID already exists (race): %d", params.NodeID)
+		// Close an old client in case it's an upsert.
+		defer p.close()
 	}
 	pm.peerMap[params.NodeID] = p
 	pm.mutex.Unlock()
 	return nil
+}
+
+// UpsertPeer upserts a new peer to the set of manager peers.
+func (pm PeerManager) RemovePeer(ctx context.Context, nodeID uint64) {
+	pm.mutex.Lock()
+	if p, ok := pm.peerMap[nodeID]; ok {
+		defer p.close()
+		delete(pm.peerMap, nodeID)
+	}
+	pm.mutex.Unlock()
 }
 
 // ClientForPeer returns the registered gRPC client for the node ID, or nil if
@@ -77,7 +79,7 @@ func (pm PeerManager) Close() error {
 			err = e
 		}
 	}
-	pm.peerMap = nil
+	pm.peerMap = make(map[uint64]Peer)
 	pm.mutex.Unlock()
 	return err
 }

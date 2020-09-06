@@ -32,7 +32,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	n := node.New(*nodeID)
+	n := node.New(*nodeID, node.NodeInfo{Addr: *host, Port: *gRPCPort})
 	storage.Foo()
 
 	srv := server.New(

@@ -49,6 +49,11 @@ service ControlService {
 
 service Raft {
 	rpc Message(raftpb.Message) returns (google.protobuf.Empty);
+	rpc GetID(google.protobuf.Empty) returns (GetIDResponse) {
+		option (google.api.http) = {
+			get: "/api/v1/raft/id"
+		};
+	}
 }
 
 enum StatusCode {
@@ -65,3 +70,7 @@ message AddPeerRequest {
 	string addr = 2;
 	string port = 3;
 };
+
+message GetIDResponse {
+    	uint64 id = 1;
+}
