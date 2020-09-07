@@ -14,11 +14,17 @@ import (
 	"github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
 	"github.com/orishu/deeb/internal/storage"
+	"go.uber.org/zap"
 
 	_ "github.com/orishu/deeb/internal/statik"
 )
 
 func main() {
+	logger := makeLogger()
+	defer logger.Sync()
+
+	logger.Info("starting")
+
 	isNewCluster := flag.Bool("n", false, "Start up a new cluster")
 	host := flag.String("host", "localhost", "The address to bind to")
 	gRPCPort := flag.String("port", "10000", "The gRPC server port")
@@ -27,7 +33,6 @@ func main() {
 	peerStr := flag.String("peers", "", "Comma-separated list of addr:port potential raft peers")
 
 	raftLogger := &raft.DefaultLogger{Logger: log.New(os.Stderr, "raft", log.LstdFlags)}
-	//raftLogger := &raft.DefaultLogger{Logger: log.New(ioutil.Discard, "", 0)}
 	raftLogger.EnableDebug()
 	raft.SetLogger(raftLogger)
 
@@ -46,10 +51,10 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("Shutting down")
+		logger.Info("Shutting down")
 		err := srv.Stop(ctx)
 		if err != nil {
-			fmt.Printf("stopping error: %+v\n", err)
+			logger.Error("stopping", zap.Error(err))
 			os.Exit(1)
 		}
 		n.Stop()
@@ -58,6 +63,14 @@ func main() {
 		n.Start(ctx, *isNewCluster, peers)
 	}()
 	srv.Start(ctx)
+}
+
+func makeLogger() *zap.SugaredLogger {
+	l, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	return l.Sugar()
 }
 
 func parsePeers(peers string) []node.NodeInfo {
