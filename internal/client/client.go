@@ -27,8 +27,8 @@ type Client struct {
 	RaftClient pb.RaftClient
 }
 
-// newClient creates a gRPC client
-func newClient(ctx context.Context, addr, port string) (*Client, error) {
+// NewClient creates a gRPC client
+func NewClient(ctx context.Context, addr, port string) (*Client, error) {
 	conn, err := grpc.DialContext(ctx, net.JoinHostPort(addr, port),
 		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
 	)

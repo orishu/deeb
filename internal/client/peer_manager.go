@@ -33,7 +33,7 @@ func NewPeerManager() *PeerManager {
 
 // UpsertPeer upserts a new peer to the set of manager peers.
 func (pm PeerManager) UpsertPeer(ctx context.Context, params PeerParams) error {
-	c, err := newClient(ctx, params.Addr, params.Port)
+	c, err := NewClient(ctx, params.Addr, params.Port)
 	if err != nil {
 		return err
 	}

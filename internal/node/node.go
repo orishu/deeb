@@ -9,6 +9,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
+	"github.com/gogo/protobuf/types"
 	"github.com/orishu/deeb/internal/client"
 )
 
@@ -57,7 +58,7 @@ func New(nodeID uint64, nodeInfo NodeInfo) *Node {
 }
 
 // Start runs the main Raft loop
-func (n *Node) Start(ctx context.Context, newCluster bool) {
+func (n *Node) Start(ctx context.Context, newCluster bool, potentialPeers []NodeInfo) {
 	logger.Printf("starting node")
 	var peers []raft.Peer
 	if newCluster {
@@ -67,14 +68,8 @@ func (n *Node) Start(ctx context.Context, newCluster bool) {
 		}
 		peers = []raft.Peer{{ID: n.config.ID, Context: b}}
 	}
+	n.discoverPotentialPeers(ctx, potentialPeers)
 	n.raftNode = raft.StartNode(&n.config, peers)
-
-	go func() {
-		err := n.raftNode.Propose(ctx, []byte("hello"))
-		if err != nil {
-			logger.Printf("error proposing hello")
-		}
-	}()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -178,4 +173,25 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
 	logger.Printf("Incoming data: %s", string(data))
 	return nil
+}
+
+func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) {
+	for _, p := range peers {
+		c, err := client.NewClient(ctx, p.Addr, p.Port)
+		if err != nil {
+			logger.Printf("failed connecting to potential peer %+v, %+v", p, err)
+			continue
+		}
+		defer c.Close()
+		id, err := c.RaftClient.GetID(ctx, &types.Empty{})
+		if err != nil {
+			logger.Printf("failed getting ID from potential peer %+v, %+v", p, err)
+			continue
+		}
+		n.peerManager.UpsertPeer(ctx, client.PeerParams{
+			NodeID: id.Id,
+			Addr:   p.Addr,
+			Port:   p.Port,
+		})
+	}
 }
