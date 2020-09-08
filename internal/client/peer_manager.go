@@ -48,7 +48,7 @@ func (pm PeerManager) UpsertPeer(ctx context.Context, params PeerParams) error {
 	return nil
 }
 
-// UpsertPeer upserts a new peer to the set of manager peers.
+// RemovePeer removes a peer from the tracked set.
 func (pm PeerManager) RemovePeer(ctx context.Context, nodeID uint64) {
 	pm.mutex.Lock()
 	if p, ok := pm.peerMap[nodeID]; ok {
