@@ -4,11 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"mime"
 	"net"
 	"net/http"
-	"os"
 
 	"github.com/gogo/gateway"
 	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
@@ -16,18 +14,12 @@ import (
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/insecure"
 	nd "github.com/orishu/deeb/internal/node"
+	"github.com/pkg/errors"
 	"github.com/rakyll/statik/fs"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/grpclog"
 )
-
-var log grpclog.LoggerV2
-
-func init() {
-	log = grpclog.NewLoggerV2(os.Stdout, ioutil.Discard, ioutil.Discard)
-	grpclog.SetLoggerV2(log)
-}
 
 // ServerParams is the group of parameters for the gRPC/HTTP server.
 type ServerParams struct {
@@ -38,15 +30,18 @@ type ServerParams struct {
 
 // Server is the gRPC and HTTP server
 type Server struct {
-	params     ServerParams
 	node       *nd.Node
+	addr       string
+	port       string
+	gwPort     string
 	grpcServer *grpc.Server
 	httpServer *http.Server
 	httpMux    *http.ServeMux
+	logger     *zap.SugaredLogger
 }
 
 // New creates a new combined gRPC and HTTP server
-func New(node *nd.Node, params ServerParams) *Server {
+func New(node *nd.Node, params ServerParams, logger *zap.SugaredLogger) *Server {
 	grpcServer := grpc.NewServer(
 		grpc.Creds(credentials.NewServerTLSFromCert(&insecure.Cert)),
 		grpc.UnaryInterceptor(grpc_validator.UnaryServerInterceptor()),
@@ -62,7 +57,9 @@ func New(node *nd.Node, params ServerParams) *Server {
 
 	return &Server{
 		node:       node,
-		params:     params,
+		addr:       params.Addr,
+		port:       params.Port,
+		gwPort:     params.GatewayPort,
 		grpcServer: grpcServer,
 		httpServer: &http.Server{
 			Addr: fmt.Sprintf("%s:%s", params.Addr, params.GatewayPort),
@@ -72,29 +69,30 @@ func New(node *nd.Node, params ServerParams) *Server {
 			Handler: mux,
 		},
 		httpMux: mux,
+		logger:  logger,
 	}
 }
 
 // Start starts the gRPC server
-func (s *Server) Start(ctx context.Context) {
+func (s *Server) Start(ctx context.Context) error {
 	jsonpb := &gateway.JSONPb{
 		EmitDefaults: true,
 		Indent:       "  ",
 		OrigName:     true,
 	}
 
-	addr := fmt.Sprintf("%s:%s", s.params.Addr, s.params.Port)
+	addr := fmt.Sprintf("%s:%s", s.addr, s.port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalln("Failed to listen:", err)
+		return errors.Wrapf(err, "failed to listen on %s", addr)
 	}
 
 	// Serve gRPC Server
-	log.Info("Serving gRPC on https://", addr)
+	s.logger.Infof("Serving gRPC on https://%s", addr)
 	go func() {
 		err := s.grpcServer.Serve(lis)
 		if err != nil {
-			log.Errorf("error serving gRPC: %+v", err)
+			s.logger.Errorf("error serving gRPC: %+v", err)
 		}
 	}()
 
@@ -108,7 +106,7 @@ func (s *Server) Start(ctx context.Context) {
 		grpc.WithBlock(),
 	)
 	if err != nil {
-		log.Fatalln("Failed to dial server:", err)
+		return errors.Wrapf(err, "failed to dial server %s", dialAddr)
 	}
 
 	gwmux := runtime.NewServeMux(
@@ -119,29 +117,36 @@ func (s *Server) Start(ctx context.Context) {
 	)
 	err = pb.RegisterControlServiceHandler(ctx, gwmux, conn)
 	if err != nil {
-		log.Fatalln("Failed to register control gateway:", err)
+		return errors.Wrap(err, "failed to register control gateway")
 	}
 	err = pb.RegisterRaftHandler(ctx, gwmux, conn)
 	if err != nil {
-		log.Fatalln("Failed to register raft gateway:", err)
+		return errors.Wrap(err, "failed to register raft gateway")
 	}
 
 	s.httpMux.Handle("/", gwmux)
 	err = serveOpenAPI(s.httpMux)
 	if err != nil {
-		log.Fatalln("Failed to serve OpenAPI UI")
+		return errors.Wrap(err, "failed to serve OpenAPI UI")
 	}
 
-	log.Info("Serving gRPC-Gateway on https://", s.httpServer.Addr)
-	log.Info("Serving OpenAPI Documentation on https://", s.httpServer.Addr, "/openapi-ui/")
-	err = s.httpServer.ListenAndServeTLS("", "")
-	if err != http.ErrServerClosed {
-		log.Errorf("http listening error: %+v")
-	}
+	s.logger.Infof("Serving gRPC-Gateway on https://%s", s.httpServer.Addr)
+	s.logger.Infof("Serving OpenAPI Documentation on https://%s/openapi-ui/", s.httpServer.Addr)
+
+	go func() {
+		s.node.Start(ctx)
+	}()
+
+	go func() {
+		s.httpServer.ListenAndServeTLS("", "")
+	}()
+
+	return nil
 }
 
 // Stop stops the combined gRPC HTTP server
 func (s *Server) Stop(ctx context.Context) error {
+	s.node.Stop()
 	err := s.httpServer.Shutdown(ctx)
 	if err != nil {
 		return err

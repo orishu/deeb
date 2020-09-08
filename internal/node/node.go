@@ -3,30 +3,26 @@ package node
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"os"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
 	"github.com/gogo/protobuf/types"
 	"github.com/orishu/deeb/internal/client"
+	"go.uber.org/zap"
 )
-
-var logger *log.Logger
-
-func init() {
-	logger = log.New(os.Stdout, "[node] ", 0)
-}
 
 // Node is the object encapsulating the Raft node.
 type Node struct {
-	config      raft.Config
-	raftNode    raft.Node
-	storage     *raft.MemoryStorage
-	done        chan bool
-	peerManager *client.PeerManager
-	nodeInfo    NodeInfo
+	config         raft.Config
+	raftNode       raft.Node
+	storage        *raft.MemoryStorage
+	done           chan bool
+	peerManager    *client.PeerManager
+	nodeInfo       NodeInfo
+	potentialPeers []NodeInfo
+	isNewCluster   bool
+	logger         *zap.SugaredLogger
 }
 
 // NodeInfo groups the node's metadata outside of its Raft configuration
@@ -35,12 +31,20 @@ type NodeInfo struct {
 	Port string `json:"port"`
 }
 
+// NodeParams is the group of params required for create a node object
+type NodeParams struct {
+	NodeID         uint64
+	AddrPort       NodeInfo
+	IsNewCluster   bool
+	PotentialPeers []NodeInfo
+}
+
 // New creates new single-node RaftCluster
-func New(nodeID uint64, nodeInfo NodeInfo) *Node {
+func New(params NodeParams, logger *zap.SugaredLogger) *Node {
 	storage := raft.NewMemoryStorage()
 
 	c := raft.Config{
-		ID:              nodeID,
+		ID:              params.NodeID,
 		ElectionTick:    10,
 		HeartbeatTick:   1,
 		Storage:         storage,
@@ -49,26 +53,29 @@ func New(nodeID uint64, nodeInfo NodeInfo) *Node {
 	}
 
 	return &Node{
-		config:      c,
-		storage:     storage,
-		done:        make(chan bool),
-		peerManager: client.NewPeerManager(),
-		nodeInfo:    nodeInfo,
+		config:         c,
+		storage:        storage,
+		done:           make(chan bool),
+		peerManager:    client.NewPeerManager(),
+		nodeInfo:       params.AddrPort,
+		potentialPeers: params.PotentialPeers,
+		isNewCluster:   params.IsNewCluster,
+		logger:         logger,
 	}
 }
 
 // Start runs the main Raft loop
-func (n *Node) Start(ctx context.Context, newCluster bool, potentialPeers []NodeInfo) {
-	logger.Printf("starting node")
+func (n *Node) Start(ctx context.Context) {
+	n.logger.Info("starting node")
 	var peers []raft.Peer
-	if newCluster {
+	if n.isNewCluster {
 		b, err := json.Marshal(n.nodeInfo)
 		if err != nil {
 			panic(err)
 		}
 		peers = []raft.Peer{{ID: n.config.ID, Context: b}}
 	}
-	n.discoverPotentialPeers(ctx, potentialPeers)
+	n.discoverPotentialPeers(ctx, n.potentialPeers)
 	n.raftNode = raft.StartNode(&n.config, peers)
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -84,7 +91,7 @@ func (n *Node) Start(ctx context.Context, newCluster bool, potentialPeers []Node
 			n.sendMessages(ctx, rd.Messages)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				////        processSnapshot(rd.Snapshot)
-				logger.Printf("got snapshot")
+				n.logger.Info("got snapshot")
 			}
 			for _, entry := range rd.CommittedEntries {
 				if entry.Type == raftpb.EntryNormal && len(entry.Data) > 0 {
@@ -96,9 +103,9 @@ func (n *Node) Start(ctx context.Context, newCluster bool, potentialPeers []Node
 					err := n.processConfChange(ctx, cc)
 					if err == nil {
 						state := n.raftNode.ApplyConfChange(cc)
-						logger.Printf("new Raft state: %#v", state)
+						n.logger.Infof("new Raft state: %#v", state)
 					} else {
-						logger.Printf("failed processing conf change: %+v", err)
+						n.logger.Errorf("failed processing conf change: %+v", err)
 					}
 				}
 			}
@@ -123,7 +130,7 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 	for _, m := range messages {
 		c := n.peerManager.ClientForPeer(m.To)
 		if c == nil {
-			logger.Printf("no peer information for node ID %d", m.To)
+			n.logger.Errorf("no peer information for node ID %d", m.To)
 			n.raftNode.ReportUnreachable(m.To)
 			continue
 		}
@@ -132,7 +139,7 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 		defer cancel()
 		_, err := c.RaftClient.Message(childCtx, &m)
 		if err != nil {
-			logger.Printf("error sending message: %+v", err)
+			n.logger.Errorf("error sending message: %+v", err)
 			n.raftNode.ReportUnreachable(m.To)
 		}
 	}
@@ -171,7 +178,7 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 }
 
 func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
-	logger.Printf("Incoming data: %s", string(data))
+	n.logger.Info("Incoming data: %s", string(data))
 	return nil
 }
 
@@ -179,13 +186,13 @@ func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) {
 	for _, p := range peers {
 		c, err := client.NewClient(ctx, p.Addr, p.Port)
 		if err != nil {
-			logger.Printf("failed connecting to potential peer %+v, %+v", p, err)
+			n.logger.Errorf("failed connecting to potential peer %+v, %+v", p, err)
 			continue
 		}
 		defer c.Close()
 		id, err := c.RaftClient.GetID(ctx, &types.Empty{})
 		if err != nil {
-			logger.Printf("failed getting ID from potential peer %+v, %+v", p, err)
+			n.logger.Errorf("failed getting ID from potential peer %+v, %+v", p, err)
 			continue
 		}
 		n.peerManager.UpsertPeer(ctx, client.PeerParams{

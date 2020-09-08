@@ -15,6 +15,7 @@ require (
 	github.com/mwitkow/go-proto-validators v0.3.2
 	github.com/pkg/errors v0.8.1
 	github.com/rakyll/statik v0.1.7
+	go.uber.org/fx v1.13.1
 	go.uber.org/zap v1.10.0
 	google.golang.org/grpc v1.31.1
 )
