@@ -13,7 +13,6 @@ import (
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
-	"github.com/orishu/deeb/internal/storage"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/grpclog"
@@ -74,9 +73,6 @@ func main() {
 			})
 		}),
 	)
-
-	// TODO: this is a placeholder
-	storage.Foo()
 
 	app := fx.New(opts)
 	ctx := context.Background()
