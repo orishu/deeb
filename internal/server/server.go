@@ -12,6 +12,7 @@ import (
 	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	pb "github.com/orishu/deeb/api"
+	"github.com/orishu/deeb/internal/client"
 	"github.com/orishu/deeb/internal/insecure"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/pkg/errors"
@@ -41,7 +42,12 @@ type Server struct {
 }
 
 // New creates a new combined gRPC and HTTP server
-func New(node *nd.Node, params ServerParams, logger *zap.SugaredLogger) *Server {
+func New(
+	params ServerParams,
+	node *nd.Node,
+	transportMgr client.TransportManager,
+	logger *zap.SugaredLogger,
+) *Server {
 	grpcServer := grpc.NewServer(
 		grpc.Creds(credentials.NewServerTLSFromCert(&insecure.Cert)),
 		grpc.UnaryInterceptor(grpc_validator.UnaryServerInterceptor()),
@@ -50,7 +56,7 @@ func New(node *nd.Node, params ServerParams, logger *zap.SugaredLogger) *Server 
 
 	cservice := controlService{node: node}
 	pb.RegisterControlServiceServer(grpcServer, &cservice)
-	rservice := raftService{node: node}
+	rservice := raftService{nodeID: node.GetID(), transportMgr: transportMgr}
 	pb.RegisterRaftServer(grpcServer, &rservice)
 
 	mux := http.NewServeMux()

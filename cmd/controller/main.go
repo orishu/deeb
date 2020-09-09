@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/etcd-io/etcd/raft"
+	"github.com/orishu/deeb/internal/client"
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
@@ -49,6 +50,8 @@ func main() {
 		}),
 		fx.Provide(nd.New),
 		fx.Provide(server.New),
+		fx.Provide(client.NewPeerManager),
+		fx.Provide(client.NewGRPCTransportManager),
 		fx.Provide(makeLogger),
 		fx.Provide(lib.NewLoggerAdapter),
 		fx.Invoke(func(

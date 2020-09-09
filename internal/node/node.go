@@ -7,7 +7,6 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
-	"github.com/gogo/protobuf/types"
 	"github.com/orishu/deeb/internal/client"
 	"go.uber.org/zap"
 )
@@ -19,6 +18,7 @@ type Node struct {
 	storage        *raft.MemoryStorage
 	done           chan bool
 	peerManager    *client.PeerManager
+	transportMgr   client.TransportManager
 	nodeInfo       NodeInfo
 	potentialPeers []NodeInfo
 	isNewCluster   bool
@@ -40,7 +40,12 @@ type NodeParams struct {
 }
 
 // New creates new single-node RaftCluster
-func New(params NodeParams, logger *zap.SugaredLogger) *Node {
+func New(
+	params NodeParams,
+	peerManager *client.PeerManager,
+	transportMgr client.TransportManager,
+	logger *zap.SugaredLogger,
+) *Node {
 	storage := raft.NewMemoryStorage()
 
 	c := raft.Config{
@@ -56,7 +61,8 @@ func New(params NodeParams, logger *zap.SugaredLogger) *Node {
 		config:         c,
 		storage:        storage,
 		done:           make(chan bool),
-		peerManager:    client.NewPeerManager(),
+		peerManager:    peerManager,
+		transportMgr:   transportMgr,
 		nodeInfo:       params.AddrPort,
 		potentialPeers: params.PotentialPeers,
 		isNewCluster:   params.IsNewCluster,
@@ -75,6 +81,7 @@ func (n *Node) Start(ctx context.Context) {
 		}
 		peers = []raft.Peer{{ID: n.config.ID, Context: b}}
 	}
+	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 	n.discoverPotentialPeers(ctx, n.potentialPeers)
 	n.raftNode = raft.StartNode(&n.config, peers)
 
@@ -137,7 +144,7 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 		m := m
 		childCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		_, err := c.RaftClient.Message(childCtx, &m)
+		err := c.SendRaftMessage(childCtx, &m)
 		if err != nil {
 			n.logger.Errorf("error sending message: %+v", err)
 			n.raftNode.ReportUnreachable(m.To)
@@ -145,8 +152,8 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 	}
 }
 
-func (n *Node) HandleRaftRPC(ctx context.Context, m raftpb.Message) {
-	_ = n.raftNode.Step(ctx, m)
+func (n *Node) handleRaftRPC(ctx context.Context, m *raftpb.Message) error {
+	return n.raftNode.Step(ctx, *m)
 }
 
 func (n *Node) saveToStorage(hardState raftpb.HardState, entries []raftpb.Entry, snap raftpb.Snapshot) {
@@ -184,19 +191,19 @@ func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
 
 func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) {
 	for _, p := range peers {
-		c, err := client.NewClient(ctx, p.Addr, p.Port)
+		c, err := n.transportMgr.CreateClient(ctx, p.Addr, p.Port)
 		if err != nil {
 			n.logger.Errorf("failed connecting to potential peer %+v, %+v", p, err)
 			continue
 		}
 		defer c.Close()
-		id, err := c.RaftClient.GetID(ctx, &types.Empty{})
+		id, err := c.GetRemoteID(ctx)
 		if err != nil {
 			n.logger.Errorf("failed getting ID from potential peer %+v, %+v", p, err)
 			continue
 		}
 		n.peerManager.UpsertPeer(ctx, client.PeerParams{
-			NodeID: id.Id,
+			NodeID: id,
 			Addr:   p.Addr,
 			Port:   p.Port,
 		})

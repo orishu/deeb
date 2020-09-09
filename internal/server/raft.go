@@ -6,19 +6,20 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/types"
 	pb "github.com/orishu/deeb/api"
-	nd "github.com/orishu/deeb/internal/node"
+	"github.com/orishu/deeb/internal/client"
 )
 
 type raftService struct {
-	node *nd.Node
+	nodeID       uint64
+	transportMgr client.TransportManager
 }
 
 func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*types.Empty, error) {
-	r.node.HandleRaftRPC(ctx, *msg)
-	return &types.Empty{}, nil
+	err := r.transportMgr.DeliverMessage(ctx, r.nodeID, msg)
+	return &types.Empty{}, err
 }
 
 func (r raftService) GetID(ctx context.Context, unused *types.Empty) (*pb.GetIDResponse, error) {
-	res := pb.GetIDResponse{Id: r.node.GetID()}
+	res := pb.GetIDResponse{Id: r.nodeID}
 	return &res, nil
 }

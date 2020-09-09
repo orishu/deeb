@@ -15,25 +15,27 @@ type PeerParams struct {
 
 // Peer maintains the peer metadata and connection.
 type Peer struct {
-	client *Client
+	client Client
 }
 
 // PeerManager maintains the set of peers.
 type PeerManager struct {
-	mutex   sync.RWMutex
-	peerMap map[uint64]Peer
+	mutex        sync.RWMutex
+	peerMap      map[uint64]Peer
+	transportMgr TransportManager
 }
 
 // NewPeerManager returns a new PeerManager.
-func NewPeerManager() *PeerManager {
+func NewPeerManager(transportMgr TransportManager) *PeerManager {
 	return &PeerManager{
-		peerMap: map[uint64]Peer{},
+		peerMap:      map[uint64]Peer{},
+		transportMgr: transportMgr,
 	}
 }
 
 // UpsertPeer upserts a new peer to the set of manager peers.
 func (pm PeerManager) UpsertPeer(ctx context.Context, params PeerParams) error {
-	c, err := NewClient(ctx, params.Addr, params.Port)
+	c, err := pm.transportMgr.CreateClient(ctx, params.Addr, params.Port)
 	if err != nil {
 		return err
 	}
@@ -60,7 +62,7 @@ func (pm PeerManager) RemovePeer(ctx context.Context, nodeID uint64) {
 
 // ClientForPeer returns the registered gRPC client for the node ID, or nil if
 // none.
-func (pm PeerManager) ClientForPeer(nodeID uint64) *Client {
+func (pm PeerManager) ClientForPeer(nodeID uint64) Client {
 	pm.mutex.RLock()
 	defer pm.mutex.RUnlock()
 	if p, ok := pm.peerMap[nodeID]; ok {

@@ -2,33 +2,25 @@ package client
 
 import (
 	"context"
-	"io/ioutil"
 	"net"
-	"os"
 
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/types"
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/insecure"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/grpclog"
 )
 
-var log grpclog.LoggerV2
-
-func init() {
-	log = grpclog.NewLoggerV2(os.Stdout, ioutil.Discard, ioutil.Discard)
-	grpclog.SetLoggerV2(log)
-}
-
-// Client is a gRPC client for communicating with other nodes
-type Client struct {
+// GRPCClient is a gRPC client for communicating with other nodes
+type GRPCClient struct {
 	conn       *grpc.ClientConn
-	RaftClient pb.RaftClient
+	raftClient pb.RaftClient
 }
 
-// NewClient creates a gRPC client
-func NewClient(ctx context.Context, addr, port string) (*Client, error) {
+// NewGRPCClient creates a gRPC client
+func NewGRPCClient(ctx context.Context, addr string, port string) (*GRPCClient, error) {
 	conn, err := grpc.DialContext(ctx, net.JoinHostPort(addr, port),
 		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
 	)
@@ -36,10 +28,20 @@ func NewClient(ctx context.Context, addr, port string) (*Client, error) {
 		return nil, errors.Wrapf(err, "grpc dial error %s:%s", addr, port)
 	}
 	raftClient := pb.NewRaftClient(conn)
-	return &Client{conn: conn, RaftClient: raftClient}, nil
+	return &GRPCClient{conn: conn, raftClient: raftClient}, nil
+}
+
+func (c *GRPCClient) SendRaftMessage(ctx context.Context, msg *raftpb.Message) error {
+	_, err := c.raftClient.Message(ctx, msg)
+	return err
+}
+
+func (c *GRPCClient) GetRemoteID(ctx context.Context) (uint64, error) {
+	resp, err := c.raftClient.GetID(ctx, &types.Empty{})
+	return resp.Id, err
 }
 
 // Close closes the gRPC connection
-func (c *Client) Close() error {
+func (c *GRPCClient) Close() error {
 	return c.conn.Close()
 }
