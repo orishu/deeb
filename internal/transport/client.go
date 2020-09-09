@@ -31,11 +31,13 @@ func NewGRPCClient(ctx context.Context, addr string, port string) (*GRPCClient, 
 	return &GRPCClient{conn: conn, raftClient: raftClient}, nil
 }
 
+// SendRaftMessage sends a Raft message through the Raft client.
 func (c *GRPCClient) SendRaftMessage(ctx context.Context, msg *raftpb.Message) error {
 	_, err := c.raftClient.Message(ctx, msg)
 	return err
 }
 
+// GetRemoteID fetches the node ID of the remote node.
 func (c *GRPCClient) GetRemoteID(ctx context.Context) (uint64, error) {
 	resp, err := c.raftClient.GetID(ctx, &types.Empty{})
 	return resp.Id, err
