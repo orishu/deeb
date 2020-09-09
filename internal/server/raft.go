@@ -6,12 +6,12 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/types"
 	pb "github.com/orishu/deeb/api"
-	"github.com/orishu/deeb/internal/client"
+	"github.com/orishu/deeb/internal/transport"
 )
 
 type raftService struct {
 	nodeID       uint64
-	transportMgr client.TransportManager
+	transportMgr transport.TransportManager
 }
 
 func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*types.Empty, error) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
-	"github.com/orishu/deeb/internal/client"
+	"github.com/orishu/deeb/internal/transport"
 	"go.uber.org/zap"
 )
 
@@ -17,8 +17,8 @@ type Node struct {
 	raftNode       raft.Node
 	storage        *raft.MemoryStorage
 	done           chan bool
-	peerManager    *client.PeerManager
-	transportMgr   client.TransportManager
+	peerManager    *transport.PeerManager
+	transportMgr   transport.TransportManager
 	nodeInfo       NodeInfo
 	potentialPeers []NodeInfo
 	isNewCluster   bool
@@ -42,8 +42,8 @@ type NodeParams struct {
 // New creates new single-node RaftCluster
 func New(
 	params NodeParams,
-	peerManager *client.PeerManager,
-	transportMgr client.TransportManager,
+	peerManager *transport.PeerManager,
+	transportMgr transport.TransportManager,
 	logger *zap.SugaredLogger,
 ) *Node {
 	storage := raft.NewMemoryStorage()
@@ -176,7 +176,7 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 	if err != nil {
 		return err
 	}
-	err = n.peerManager.UpsertPeer(ctx, client.PeerParams{
+	err = n.peerManager.UpsertPeer(ctx, transport.PeerParams{
 		NodeID: cc.ID,
 		Addr:   nodeInfo.Addr,
 		Port:   nodeInfo.Port,
@@ -202,7 +202,7 @@ func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) {
 			n.logger.Errorf("failed getting ID from potential peer %+v, %+v", p, err)
 			continue
 		}
-		n.peerManager.UpsertPeer(ctx, client.PeerParams{
+		n.peerManager.UpsertPeer(ctx, transport.PeerParams{
 			NodeID: id,
 			Addr:   p.Addr,
 			Port:   p.Port,

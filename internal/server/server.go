@@ -12,9 +12,9 @@ import (
 	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	pb "github.com/orishu/deeb/api"
-	"github.com/orishu/deeb/internal/client"
 	"github.com/orishu/deeb/internal/insecure"
 	nd "github.com/orishu/deeb/internal/node"
+	"github.com/orishu/deeb/internal/transport"
 	"github.com/pkg/errors"
 	"github.com/rakyll/statik/fs"
 	"go.uber.org/zap"
@@ -45,7 +45,7 @@ type Server struct {
 func New(
 	params ServerParams,
 	node *nd.Node,
-	transportMgr client.TransportManager,
+	transportMgr transport.TransportManager,
 	logger *zap.SugaredLogger,
 ) *Server {
 	grpcServer := grpc.NewServer(
