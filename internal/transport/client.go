@@ -20,7 +20,7 @@ type GRPCClient struct {
 }
 
 // NewGRPCClient creates a gRPC client
-func NewGRPCClient(ctx context.Context, addr string, port string) (*GRPCClient, error) {
+func NewGRPCClient(ctx context.Context, addr string, port string) (Client, error) {
 	conn, err := grpc.DialContext(ctx, net.JoinHostPort(addr, port),
 		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
 	)

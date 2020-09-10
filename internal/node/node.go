@@ -18,7 +18,7 @@ type Node struct {
 	storage        *raft.MemoryStorage
 	done           chan bool
 	peerManager    *transport.PeerManager
-	transportMgr   transport.TransportManager
+	transportMgr   *transport.TransportManager
 	nodeInfo       NodeInfo
 	potentialPeers []NodeInfo
 	isNewCluster   bool
@@ -43,7 +43,7 @@ type NodeParams struct {
 func New(
 	params NodeParams,
 	peerManager *transport.PeerManager,
-	transportMgr transport.TransportManager,
+	transportMgr *transport.TransportManager,
 	logger *zap.SugaredLogger,
 ) *Node {
 	storage := raft.NewMemoryStorage()

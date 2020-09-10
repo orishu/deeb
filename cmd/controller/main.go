@@ -51,7 +51,8 @@ func main() {
 		fx.Provide(nd.New),
 		fx.Provide(server.New),
 		fx.Provide(transport.NewPeerManager),
-		fx.Provide(transport.NewGRPCTransportManager),
+		fx.Provide(transport.NewTransportManager),
+		fx.Provide(func() transport.ClientFactory { return transport.NewGRPCClient }),
 		fx.Provide(makeLogger),
 		fx.Provide(lib.NewLoggerAdapter),
 		fx.Invoke(func(

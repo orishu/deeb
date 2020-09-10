@@ -22,11 +22,11 @@ type Peer struct {
 type PeerManager struct {
 	mutex        sync.RWMutex
 	peerMap      map[uint64]Peer
-	transportMgr TransportManager
+	transportMgr *TransportManager
 }
 
 // NewPeerManager returns a new PeerManager.
-func NewPeerManager(transportMgr TransportManager) *PeerManager {
+func NewPeerManager(transportMgr *TransportManager) *PeerManager {
 	return &PeerManager{
 		peerMap:      map[uint64]Peer{},
 		transportMgr: transportMgr,

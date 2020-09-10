@@ -18,33 +18,29 @@ type Client interface {
 // RaftCallback is the callback type for incoming Raft messages.
 type RaftCallback func(ctx context.Context, m *raftpb.Message) error
 
-// TransportManager is the interface abstracting client creation and delivering
-// messages to registered nodes.
-type TransportManager interface {
-	CreateClient(ctx context.Context, addr string, port string) (Client, error)
-	RegisterDestCallback(id uint64, callback RaftCallback)
-	DeliverMessage(ctx context.Context, destID uint64, m *raftpb.Message) error
+// ClientFactory is the type of a function that creates an RPC client
+type ClientFactory func(ctx context.Context, addr string, port string) (Client, error)
+
+// TransportManager is the gRPC implementation of a transport manager
+type TransportManager struct {
+	clientFactory ClientFactory
+	destMap       map[uint64]RaftCallback
+	mutex         sync.RWMutex
 }
 
-// GRPCTransportManager is the gRPC implementation of a transport manager
-type GRPCTransportManager struct {
-	destMap map[uint64]RaftCallback
-	mutex   sync.RWMutex
-}
-
-// NewGRPCTransportManager creates a new gRPC TransportManager
-func NewGRPCTransportManager() TransportManager {
-	return &GRPCTransportManager{destMap: make(map[uint64]RaftCallback)}
+// NewTransportManager creates a new gRPC TransportManager
+func NewTransportManager(clientFactory ClientFactory) *TransportManager {
+	return &TransportManager{clientFactory: clientFactory, destMap: make(map[uint64]RaftCallback)}
 }
 
 // CreateClient creates a new client to a remote node.
-func (tm *GRPCTransportManager) CreateClient(ctx context.Context, addr string, port string) (Client, error) {
-	return NewGRPCClient(ctx, addr, port)
+func (tm *TransportManager) CreateClient(ctx context.Context, addr string, port string) (Client, error) {
+	return tm.clientFactory(ctx, addr, port)
 }
 
 // RegisterDestCallback registers a callback with a node ID for delivering
 // incoming messages.
-func (tm *GRPCTransportManager) RegisterDestCallback(id uint64, callback RaftCallback) {
+func (tm *TransportManager) RegisterDestCallback(id uint64, callback RaftCallback) {
 	tm.mutex.Lock()
 	defer tm.mutex.Unlock()
 	tm.destMap[id] = callback
@@ -52,7 +48,7 @@ func (tm *GRPCTransportManager) RegisterDestCallback(id uint64, callback RaftCal
 
 // DeliverMessage processes incoming message by calling the registered
 // destination's callback.
-func (tm *GRPCTransportManager) DeliverMessage(ctx context.Context, destID uint64, m *raftpb.Message) error {
+func (tm *TransportManager) DeliverMessage(ctx context.Context, destID uint64, m *raftpb.Message) error {
 	tm.mutex.RLock()
 	cb, ok := tm.destMap[destID]
 	tm.mutex.RUnlock()

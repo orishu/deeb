@@ -11,7 +11,7 @@ import (
 
 type raftService struct {
 	nodeID       uint64
-	transportMgr transport.TransportManager
+	transportMgr *transport.TransportManager
 }
 
 func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*types.Empty, error) {

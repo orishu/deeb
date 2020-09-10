@@ -45,7 +45,7 @@ type Server struct {
 func New(
 	params ServerParams,
 	node *nd.Node,
-	transportMgr transport.TransportManager,
+	transportMgr *transport.TransportManager,
 	logger *zap.SugaredLogger,
 ) *Server {
 	grpcServer := grpc.NewServer(
