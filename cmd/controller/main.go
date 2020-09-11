@@ -32,53 +32,54 @@ func main() {
 	flag.Parse()
 	peers := parsePeers(*peerStr)
 
-	opts := fx.Options(
-		fx.Provide(func() nd.NodeParams {
+	provides := fx.Provide(
+		func() nd.NodeParams {
 			return nd.NodeParams{
 				NodeID:         *nodeID,
 				AddrPort:       nd.NodeInfo{Addr: *host, Port: *gRPCPort},
 				IsNewCluster:   *isNewCluster,
 				PotentialPeers: peers,
 			}
-		}),
-		fx.Provide(func() server.ServerParams {
+		},
+		func() server.ServerParams {
 			return server.ServerParams{
 				Addr:        *host,
 				Port:        *gRPCPort,
 				GatewayPort: *gatewayPort,
 			}
-		}),
-		fx.Provide(nd.New),
-		fx.Provide(server.New),
-		fx.Provide(transport.NewPeerManager),
-		fx.Provide(transport.NewTransportManager),
-		fx.Provide(func() transport.ClientFactory { return transport.NewGRPCClient }),
-		fx.Provide(lib.MakeDevelopmentLogger),
-		fx.Provide(lib.NewLoggerAdapter),
-		fx.Invoke(func(
-			lc fx.Lifecycle,
-			srv *server.Server,
-			logger *zap.SugaredLogger,
-			loggerAdapter lib.LoggerAdapter,
-		) {
-			raft.SetLogger(&loggerAdapter)
-			grpclog.SetLoggerV2(&loggerAdapter)
-			logger.Info("starting Fx app")
-			lc.Append(fx.Hook{
-				OnStart: func(ctx context.Context) error {
-					logger.Info("OnStart")
-					return srv.Start(ctx)
-				},
-				OnStop: func(ctx context.Context) error {
-					logger.Info("OnStop")
-					defer logger.Sync()
-					return srv.Stop(ctx)
-				},
-			})
-		}),
+		},
+		nd.New,
+		server.New,
+		transport.NewPeerManager,
+		transport.NewTransportManager,
+		func() transport.ClientFactory { return transport.NewGRPCClient },
+		lib.NewDevelopmentLogger,
+		lib.NewLoggerAdapter,
 	)
 
-	app := fx.New(opts)
+	invoke := func(
+		lc fx.Lifecycle,
+		srv *server.Server,
+		logger *zap.SugaredLogger,
+		loggerAdapter lib.LoggerAdapter,
+	) {
+		raft.SetLogger(&loggerAdapter)
+		grpclog.SetLoggerV2(&loggerAdapter)
+		logger.Info("starting Fx app")
+		lc.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				logger.Info("OnStart")
+				return srv.Start(ctx)
+			},
+			OnStop: func(ctx context.Context) error {
+				logger.Info("OnStop")
+				defer logger.Sync()
+				return srv.Stop(ctx)
+			},
+		})
+	}
+
+	app := fx.New(provides, fx.Invoke(invoke))
 	ctx := context.Background()
 	err := app.Start(ctx)
 	if err != nil {

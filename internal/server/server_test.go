@@ -36,36 +36,34 @@ func Test_basic_server_operation(t *testing.T) {
 		})
 	}
 
-	opts := fx.Options(
-		fx.Provide(
-			lib.NewDevelopmentLogger,
-		),
-		fx.Provide(func() ServerParams {
+	provides := fx.Provide(
+		lib.NewDevelopmentLogger,
+		func() ServerParams {
 			return ServerParams{
 				Addr:        "localhost",
 				Port:        grpcPort,
 				GatewayPort: gwPort,
 			}
-		}),
-		fx.Provide(func() nd.NodeParams {
+		},
+		func() nd.NodeParams {
 			return nd.NodeParams{
 				NodeID:       123,
 				AddrPort:     nd.NodeInfo{Addr: "localhost", Port: grpcPort},
 				IsNewCluster: true,
 			}
-		}),
-		fx.Provide(New),
-		fx.Provide(nd.New),
-		fx.Provide(transport.NewPeerManager),
-		fx.Provide(transport.NewTransportManager),
-		fx.Provide(func() transport.ClientFactory {
+		},
+		New,
+		nd.New,
+		transport.NewPeerManager,
+		transport.NewTransportManager,
+		func() transport.ClientFactory {
 			return func(context.Context, string, string) (transport.Client, error) {
 				return &transport.GRPCClient{}, nil
 			}
-		}),
-		fx.Invoke(invokeFunc),
+		},
 	)
-	app := fxtest.New(t, opts)
+
+	app := fxtest.New(t, provides, fx.Invoke(invokeFunc))
 	app.RequireStart()
 
 	ctx := context.Background()
