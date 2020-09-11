@@ -8,13 +8,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-// Client abstracts the RPCs to a remote node.
-type Client interface {
-	SendRaftMessage(ctx context.Context, msg *raftpb.Message) error
-	GetRemoteID(ctx context.Context) (uint64, error)
-	Close() error
-}
-
 // RaftCallback is the callback type for incoming Raft messages.
 type RaftCallback func(ctx context.Context, m *raftpb.Message) error
 

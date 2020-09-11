@@ -13,6 +13,13 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+// Client abstracts the RPCs to a remote node.
+type Client interface {
+	SendRaftMessage(ctx context.Context, msg *raftpb.Message) error
+	GetRemoteID(ctx context.Context) (uint64, error)
+	Close() error
+}
+
 // GRPCClient is a gRPC client for communicating with other nodes
 type GRPCClient struct {
 	conn       *grpc.ClientConn
@@ -40,10 +47,16 @@ func (c *GRPCClient) SendRaftMessage(ctx context.Context, msg *raftpb.Message) e
 // GetRemoteID fetches the node ID of the remote node.
 func (c *GRPCClient) GetRemoteID(ctx context.Context) (uint64, error) {
 	resp, err := c.raftClient.GetID(ctx, &types.Empty{})
-	return resp.Id, err
+	if err != nil {
+		return 0, err
+	}
+	return resp.Id, nil
 }
 
 // Close closes the gRPC connection
 func (c *GRPCClient) Close() error {
-	return c.conn.Close()
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
 }

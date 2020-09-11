@@ -53,7 +53,7 @@ func main() {
 		fx.Provide(transport.NewPeerManager),
 		fx.Provide(transport.NewTransportManager),
 		fx.Provide(func() transport.ClientFactory { return transport.NewGRPCClient }),
-		fx.Provide(makeLogger),
+		fx.Provide(lib.MakeDevelopmentLogger),
 		fx.Provide(lib.NewLoggerAdapter),
 		fx.Invoke(func(
 			lc fx.Lifecycle,
@@ -89,14 +89,6 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 	app.Stop(ctx)
-}
-
-func makeLogger() *zap.SugaredLogger {
-	l, err := zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
-	return l.Sugar()
 }
 
 func parsePeers(peers string) []nd.NodeInfo {
