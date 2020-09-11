@@ -41,12 +41,12 @@ func (tm *TransportManager) RegisterDestCallback(id uint64, callback RaftCallbac
 
 // DeliverMessage processes incoming message by calling the registered
 // destination's callback.
-func (tm *TransportManager) DeliverMessage(ctx context.Context, destID uint64, m *raftpb.Message) error {
+func (tm *TransportManager) DeliverMessage(ctx context.Context, m *raftpb.Message) error {
 	tm.mutex.RLock()
-	cb, ok := tm.destMap[destID]
+	cb, ok := tm.destMap[m.To]
 	tm.mutex.RUnlock()
 	if ok {
 		return cb(ctx, m)
 	}
-	return fmt.Errorf("destination not found %d", destID)
+	return fmt.Errorf("destination not found %d", m.To)
 }

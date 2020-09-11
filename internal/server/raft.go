@@ -15,7 +15,7 @@ type raftService struct {
 }
 
 func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*types.Empty, error) {
-	err := r.transportMgr.DeliverMessage(ctx, r.nodeID, msg)
+	err := r.transportMgr.DeliverMessage(ctx, msg)
 	return &types.Empty{}, err
 }
 
