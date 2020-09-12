@@ -129,8 +129,14 @@ func (n *Node) Stop() {
 	n.done <- true
 }
 
+// GetID returns the node ID
 func (n *Node) GetID() uint64 {
 	return n.config.ID
+}
+
+// Propose proposes Raft data to the cluster.
+func (n *Node) Propose(ctx context.Context, data []byte) error {
+	return n.raftNode.Propose(ctx, data)
 }
 
 func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
@@ -185,7 +191,7 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 }
 
 func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
-	n.logger.Info("Incoming data: %s", string(data))
+	n.logger.Infof("Incoming data: %s", string(data))
 	return nil
 }
 
