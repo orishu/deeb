@@ -7,6 +7,8 @@ import (
 )
 
 type DBBackend interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context)
 	AppendEntries(ctx context.Context, entries []raftpb.Entry) error
 	SaveHardState(ctx context.Context, hardState raftpb.HardState) error
 	ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
