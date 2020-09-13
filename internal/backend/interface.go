@@ -10,10 +10,9 @@ type DBBackend interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
 	AppendEntries(ctx context.Context, entries []raftpb.Entry) error
-	SaveHardState(ctx context.Context, hardState raftpb.HardState) error
+	SaveHardState(ctx context.Context, hardState *raftpb.HardState) error
+	SaveConfState(ctx context.Context, confState *raftpb.ConfState) error
 	ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
-	QueryEntries(ctx context.Context, lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry, error)
-	QueryEntryTerm(ctx context.Context, i uint64) (uint64, error)
-	QueryLastIndex(ctx context.Context) (uint64, error)
-	QueryFirstIndex(ctx context.Context) (uint64, error)
+	UpsertPeer(ctx context.Context, nodeID uint64, addr string, port string) error
+	RemovePeer(ctx context.Context, nodeID uint64) error
 }

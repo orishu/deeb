@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/etcd-io/etcd/raft"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,7 @@ func Test_basic_sqlite_access(t *testing.T) {
 
 	require.NoError(t, err)
 	b := New(dir, lib.NewDevelopmentLogger())
+	st := b.(raft.Storage)
 	ctx := context.Background()
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
@@ -31,16 +33,16 @@ func Test_basic_sqlite_access(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = b.SaveHardState(ctx, raftpb.HardState{Term: 1, Vote: 12, Commit: 100})
+	err = b.SaveHardState(ctx, &raftpb.HardState{Term: 1, Vote: 12, Commit: 100})
 	require.NoError(t, err)
-	err = b.SaveHardState(ctx, raftpb.HardState{Term: 2, Vote: 12, Commit: 101})
+	err = b.SaveHardState(ctx, &raftpb.HardState{Term: 2, Vote: 12, Commit: 101})
 	require.NoError(t, err)
 
-	term, err := b.QueryEntryTerm(ctx, 2)
+	term, err := st.Term(2)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), term)
 
-	entries, err := b.QueryEntries(ctx, 2, 4, 10)
+	entries, err := st.Entries(2, 4, 10)
 	require.NoError(t, err)
 	require.Equal(t,
 		[]raftpb.Entry{
@@ -50,10 +52,25 @@ func Test_basic_sqlite_access(t *testing.T) {
 		entries,
 	)
 
-	minIdx, err := b.QueryFirstIndex(ctx)
+	minIdx, err := st.FirstIndex()
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), minIdx)
-	maxIdx, err := b.QueryLastIndex(ctx)
+	maxIdx, err := st.LastIndex()
 	require.NoError(t, err)
 	require.Equal(t, uint64(4), maxIdx)
+
+	err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}})
+	require.NoError(t, err)
+
+	err = b.UpsertPeer(ctx, 3, "localhost", "10000")
+	require.NoError(t, err)
+	err = b.UpsertPeer(ctx, 4, "localhost", "10001")
+	require.NoError(t, err)
+	err = b.RemovePeer(ctx, 3)
+	require.NoError(t, err)
+
+	hs, cs, err := st.InitialState()
+	require.NoError(t, err)
+	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
+	require.Equal(t, raftpb.HardState{Term: 2, Vote: 12, Commit: 101}, hs)
 }
