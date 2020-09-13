@@ -1,8 +1,10 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -73,4 +75,17 @@ func Test_basic_sqlite_access(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
 	require.Equal(t, raftpb.HardState{Term: 2, Vote: 12, Commit: 101}, hs)
+
+	err = b.SaveApplied(ctx, 10, 123)
+	require.NoError(t, err)
+
+	snap, err := st.Snapshot()
+	require.NoError(t, err)
+	require.Equal(t, uint64(10), snap.Metadata.Term)
+	require.Equal(t, uint64(123), snap.Metadata.Index)
+	tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)
+	_, err = io.Copy(tarFile, bytes.NewReader(snap.Data))
+	require.NoError(t, err)
+	err = tarFile.Close()
+	require.NoError(t, err)
 }

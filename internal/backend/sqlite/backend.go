@@ -1,9 +1,14 @@
 package sqlite
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/golang/protobuf/proto"
@@ -13,19 +18,24 @@ import (
 	"go.uber.org/zap"
 )
 
-func New(dbPath string, logger *zap.SugaredLogger) backend.DBBackend {
+func New(dbDir string, logger *zap.SugaredLogger) backend.DBBackend {
 	return &Backend{
-		dbPath:     fmt.Sprintf("%s/db.sqlite", dbPath),
-		raftDBPath: fmt.Sprintf("%s/raft.sqlite", dbPath),
+		dbDir:      dbDir,
+		dbPath:     fmt.Sprintf("%s/db.sqlite", dbDir),
+		mgmtDBPath: fmt.Sprintf("%s/mgmt.sqlite", dbDir),
+		raftDBPath: fmt.Sprintf("%s/raft.sqlite", dbDir),
 		logger:     logger,
 	}
 }
 
 // Backend is the sqlite backend
 type Backend struct {
+	dbDir      string
 	dbPath     string
+	mgmtDBPath string
 	raftDBPath string
 	db         *sql.DB
+	mgmtdb     *sql.DB
 	raftdb     *sql.DB
 	logger     *zap.SugaredLogger
 }
@@ -36,9 +46,13 @@ func (b *Backend) Start(ctx context.Context) error {
 		return errors.Wrapf(err, "opening db at %s", b.dbPath)
 	}
 	b.db = db
+	mgmtdb, err := sql.Open("sqlite3", b.mgmtDBPath)
+	if err != nil {
+		return errors.Wrapf(err, "opening mgmt db at %s", b.mgmtDBPath)
+	}
+	b.mgmtdb = mgmtdb
 	raftdb, err := sql.Open("sqlite3", b.raftDBPath)
 	if err != nil {
-		return err
 		return errors.Wrapf(err, "opening raft db at %s", b.raftDBPath)
 	}
 	b.raftdb = raftdb
@@ -73,7 +87,7 @@ func (b *Backend) Start(ctx context.Context) error {
 			nodeid INTEGER PRIMARY KEY,
 			address TEXT NOT NULL,
 			port TEXT NOT NULL)`
-	_, err = b.raftdb.ExecContext(ctx, query)
+	_, err = b.mgmtdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating peers table")
 	}
@@ -93,6 +107,9 @@ func (b *Backend) Start(ctx context.Context) error {
 func (b *Backend) Stop(ctx context.Context) {
 	if b.raftdb != nil {
 		b.raftdb.Close()
+	}
+	if b.mgmtdb != nil {
+		b.mgmtdb.Close()
 	}
 	if b.db != nil {
 		b.db.Close()
@@ -155,6 +172,15 @@ func (b *Backend) SaveHardState(ctx context.Context, hardState *raftpb.HardState
 	return nil
 }
 
+func (b *Backend) SaveApplied(ctx context.Context, Term uint64, Index uint64) error {
+	query := `UPDATE state SET term = ?, idx = ? WHERE rowid = 1`
+	_, err := b.raftdb.ExecContext(ctx, query, Term, Index)
+	if err != nil {
+		return errors.Wrap(err, "saving applied state")
+	}
+	return nil
+}
+
 func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState) error {
 	query := `UPDATE state SET confstate = ? WHERE rowid = 1`
 	d, err := proto.Marshal(confState)
@@ -170,7 +196,7 @@ func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState
 
 func (b *Backend) UpsertPeer(ctx context.Context, nodeID uint64, addr string, port string) error {
 	query := `REPLACE INTO peers (nodeid, address, port) VALUES (?,?,?)`
-	_, err := b.raftdb.ExecContext(ctx, query, nodeID, addr, port)
+	_, err := b.mgmtdb.ExecContext(ctx, query, nodeID, addr, port)
 	if err != nil {
 		return errors.Wrap(err, "upserting peer")
 	}
@@ -179,7 +205,7 @@ func (b *Backend) UpsertPeer(ctx context.Context, nodeID uint64, addr string, po
 
 func (b *Backend) RemovePeer(ctx context.Context, nodeID uint64) error {
 	query := `DELETE FROM peers WHERE nodeid = ?`
-	_, err := b.raftdb.ExecContext(ctx, query, nodeID)
+	_, err := b.mgmtdb.ExecContext(ctx, query, nodeID)
 	if err != nil {
 		return errors.Wrap(err, "deleting peer")
 	}
@@ -187,7 +213,60 @@ func (b *Backend) RemovePeer(ctx context.Context, nodeID uint64) error {
 }
 
 func (b *Backend) Snapshot() (raftpb.Snapshot, error) {
-	return raftpb.Snapshot{}, nil
+	dir, err := os.Open(b.dbDir)
+	if err != nil {
+		return raftpb.Snapshot{}, errors.Wrapf(err, "opening dir %s", b.dbDir)
+	}
+	fileinfos, err := dir.Readdir(0)
+	if err != nil {
+		return raftpb.Snapshot{}, errors.Wrapf(err, "reading dir %s", b.dbDir)
+	}
+	// First, open all files so they are read-locked.
+	openFiles := make([]*os.File, 0, len(fileinfos))
+	for _, fi := range fileinfos {
+		f, err := os.Open(dir.Name() + "/" + fi.Name())
+		if err != nil {
+			return raftpb.Snapshot{}, errors.Wrapf(err, "opening file %s", fi.Name())
+		}
+		openFiles = append(openFiles, f)
+		defer f.Close()
+	}
+
+	ctx := context.Background()
+	query := `SELECT term, idx FROM state WHERE rowid = 1`
+	row := b.raftdb.QueryRowContext(ctx, query)
+
+	snapMeta := raftpb.SnapshotMetadata{}
+	err = row.Scan(&snapMeta.Term, &snapMeta.Index)
+	if err != nil {
+		return raftpb.Snapshot{}, errors.Wrap(err, "retrieving raft state")
+	}
+
+	var buf bytes.Buffer
+	tarWriter := tar.NewWriter(&buf)
+	for i, fi := range fileinfos {
+		if filepath.Base(fi.Name()) == "raft.sqlite" {
+			// Do not archive the raft DB
+			continue
+		}
+		hdr := &tar.Header{
+			Name: filepath.Base(fi.Name()),
+			Mode: int64(fi.Mode()),
+			Size: fi.Size(),
+		}
+		if err := tarWriter.WriteHeader(hdr); err != nil {
+			return raftpb.Snapshot{}, errors.Wrapf(err, "archiving file header %s", fi.Name())
+		}
+		_, err = io.Copy(tarWriter, openFiles[i])
+		if err != nil {
+			return raftpb.Snapshot{}, errors.Wrapf(err, "archiving file %s", fi.Name())
+		}
+	}
+	err = tarWriter.Close()
+	if err != nil {
+		return raftpb.Snapshot{}, errors.Wrap(err, "closing tar")
+	}
+	return raftpb.Snapshot{Data: buf.Bytes(), Metadata: snapMeta}, nil
 }
 
 func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error {
