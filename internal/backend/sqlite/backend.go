@@ -42,22 +42,21 @@ func (b *Backend) Start(ctx context.Context) error {
 	}
 	b.raftdb = raftdb
 
-	cmd := `CREATE TABLE IF NOT EXISTS hard_state (
+	query := `CREATE TABLE IF NOT EXISTS hard_state (
 			term INTEGER NOT NULL,
 			vote INTEGER NOT NULL,
 			commitidx INTEGER NOT NULL)`
-	_, err = b.raftdb.ExecContext(ctx, cmd)
+	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating hard_state table")
 	}
 
-	cmd = `CREATE TABLE IF NOT EXISTS entries (
+	query = `CREATE TABLE IF NOT EXISTS entries (
 			idx INTEGER PRIMARY KEY,
 			term INTEGER NOT NULL,
 			type INTEGER NOT NULL,
-			data BLOB NOT NULL
-		) WITHOUT ROWID`
-	_, err = b.raftdb.ExecContext(ctx, cmd)
+			data BLOB NOT NULL) WITHOUT ROWID`
+	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating entries table")
 	}
@@ -75,11 +74,11 @@ func (b *Backend) Stop(ctx context.Context) {
 
 func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) error {
 	for _, entry := range entries {
-		cmd := `INSERT INTO entries
+		query := `INSERT INTO entries
 				(idx, term, type, data)
 				VALUES (?,?,?,?)`
 		res, err := b.raftdb.ExecContext(
-			ctx, cmd, entry.Index, entry.Term, entry.Type, entry.Data)
+			ctx, query, entry.Index, entry.Term, entry.Type, entry.Data)
 		if err != nil {
 			return errors.Wrap(err, "appending raft entries")
 		}
@@ -95,11 +94,11 @@ func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) err
 }
 
 func (b *Backend) SaveHardState(ctx context.Context, hardState raftpb.HardState) error {
-	cmd := `REPLACE INTO hard_state
+	query := `REPLACE INTO hard_state
 			(rowid, term, vote, commitidx)
 			VALUES (?,?,?,?)`
 	_, err := b.raftdb.ExecContext(
-		ctx, cmd, 1, hardState.Term, hardState.Vote, hardState.Commit)
+		ctx, query, 1, hardState.Term, hardState.Vote, hardState.Commit)
 	if err != nil {
 		return errors.Wrap(err, "saving hard state")
 	}
@@ -111,10 +110,10 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 }
 
 func (b *Backend) QueryEntries(ctx context.Context, lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry, error) {
-	cmd := `SELECT idx, term, type, data FROM entries
-		WHERE idx >= ? AND idx < ? LIMIT ?`
+	query := `SELECT idx, term, type, data FROM entries
+			WHERE idx >= ? AND idx < ? LIMIT ?`
 	result := make([]raftpb.Entry, 0, maxSize)
-	rows, err := b.raftdb.QueryContext(ctx, cmd, lo, hi, maxSize)
+	rows, err := b.raftdb.QueryContext(ctx, query, lo, hi, maxSize)
 	if err != nil {
 		return nil, errors.Wrapf(err, "querying entries [%d,%d) limit %d", lo, hi, maxSize)
 	}
@@ -131,20 +130,26 @@ func (b *Backend) QueryEntries(ctx context.Context, lo uint64, hi uint64, maxSiz
 }
 
 func (b *Backend) QueryEntryTerm(ctx context.Context, i uint64) (uint64, error) {
-	cmd := `SELECT term FROM entries WHERE idx = ?`
-	row := b.raftdb.QueryRowContext(ctx, cmd, i)
-	var term uint64
-	err := row.Scan(&term)
-	if err != nil {
-		return 0, errors.Wrapf(err, "reading term of entry %d", i)
-	}
-	return term, nil
+	query := `SELECT term FROM entries WHERE idx = ?`
+	return queryInteger(ctx, b.raftdb, query, i)
 }
 
 func (b *Backend) QueryLastIndex(ctx context.Context) (uint64, error) {
-	return 0, nil
+	query := `SELECT max(idx) FROM entries`
+	return queryInteger(ctx, b.raftdb, query)
 }
 
 func (b *Backend) QueryFirstIndex(ctx context.Context) (uint64, error) {
-	return 0, nil
+	query := `SELECT min(idx) FROM entries`
+	return queryInteger(ctx, b.raftdb, query)
+}
+
+func queryInteger(ctx context.Context, db *sql.DB, query string, args ...interface{}) (uint64, error) {
+	row := db.QueryRowContext(ctx, query, args...)
+	var result uint64
+	err := row.Scan(&result)
+	if err != nil {
+		return 0, errors.Wrapf(err, "query: %s %+v", query, args)
+	}
+	return result, nil
 }

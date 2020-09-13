@@ -49,4 +49,11 @@ func Test_basic_sqlite_access(t *testing.T) {
 		},
 		entries,
 	)
+
+	minIdx, err := b.QueryFirstIndex(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), minIdx)
+	maxIdx, err := b.QueryLastIndex(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(4), maxIdx)
 }
