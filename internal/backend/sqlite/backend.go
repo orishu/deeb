@@ -270,6 +270,49 @@ func (b *Backend) Snapshot() (raftpb.Snapshot, error) {
 }
 
 func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error {
+	b.Stop(ctx)
+	restarted := false
+	defer func() {
+		if !restarted {
+			b.Start(ctx)
+		}
+	}()
+	tr := tar.NewReader(bytes.NewReader(snap.Data))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return errors.Wrap(err, "reading tar")
+		}
+		fname := b.dbDir + "/" + hdr.Name
+		f, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE, os.FileMode(hdr.Mode))
+		if err != nil {
+			return errors.Wrapf(err, "opening file %s for writing", hdr.Name)
+		}
+		_, err = io.Copy(f, tr)
+		if err != nil {
+			f.Close()
+			return errors.Wrapf(err, "extracting %s", hdr.Name)
+		}
+		f.Close()
+	}
+
+	if err := b.Start(ctx); err != nil {
+		return errors.Wrap(err, "restarting databases after applying snapshot")
+	}
+	restarted = true
+
+	err := b.SaveConfState(ctx, &snap.Metadata.ConfState)
+	if err != nil {
+		return errors.Wrap(err, "saving conf state from snapshot")
+	}
+	err = b.SaveApplied(ctx, snap.Metadata.Term, snap.Metadata.Index)
+	if err != nil {
+		return errors.Wrap(err, "saving term and index from snapshot")
+	}
+
 	return nil
 }
 
