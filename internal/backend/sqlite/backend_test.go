@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/etcd-io/etcd/raft"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/stretchr/testify/require"
 )
@@ -20,8 +19,7 @@ func Test_basic_sqlite_access(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	require.NoError(t, err)
-	b := New(dir, lib.NewDevelopmentLogger())
-	st := b.(raft.Storage)
+	b, st := New(dir, lib.NewDevelopmentLogger())
 	ctx := context.Background()
 	err = b.Start(ctx)
 	defer b.Stop(ctx)

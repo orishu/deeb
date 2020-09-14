@@ -2,9 +2,13 @@ package node
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/orishu/deeb/internal/backend/sqlite"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/orishu/deeb/internal/transport"
 	"github.com/stretchr/testify/require"
@@ -13,6 +17,9 @@ import (
 func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	logger := lib.NewDevelopmentLogger()
 	inprocessReg := transport.NewInProcessRegistry()
+	dir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
 
 	nodeInfos := []NodeInfo{
 		NodeInfo{Addr: "localhost", Port: "10000"},
@@ -38,31 +45,44 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 		},
 	}
 	nodes := make([]*Node, 0, len(nodeParams))
-	for _, np := range nodeParams {
+	for i, np := range nodeParams {
 		transportMgr := transport.NewTransportManager(transport.NewInProcessClientFactory(inprocessReg))
 		inprocessReg.Register(transportMgr, np.AddrPort.Addr, np.AddrPort.Port, np.NodeID)
-		n := New(np, transport.NewPeerManager(transportMgr), transportMgr, logger)
+		nodeDir := fmt.Sprintf("%s/db%d", dir, i)
+		os.Mkdir(nodeDir, 0755)
+		be, st := sqlite.New(nodeDir, logger)
+		n := New(
+			np,
+			transport.NewPeerManager(transportMgr),
+			transportMgr,
+			st,
+			be,
+			logger,
+		)
 		nodes = append(nodes, n)
 	}
 
 	ctx := context.Background()
 
 	go func() {
-		nodes[0].Start(ctx)
+		err := nodes[0].Start(ctx)
+		require.NoError(t, err)
 	}()
 
 	time.Sleep(1 * time.Second)
 	nodes[0].AddNode(ctx, 101, nodeInfos[1])
 
 	go func() {
-		nodes[1].Start(ctx)
+		err := nodes[1].Start(ctx)
+		require.NoError(t, err)
 	}()
 
 	time.Sleep(1 * time.Second)
 	nodes[1].AddNode(ctx, 102, nodeInfos[2])
 
 	go func() {
-		nodes[2].Start(ctx)
+		err := nodes[2].Start(ctx)
+		require.NoError(t, err)
 	}()
 
 	time.Sleep(1 * time.Second)
@@ -73,7 +93,7 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	require.Equal(t, uint64(100), nodes[0].GetID())
-	nodes[2].Stop()
-	nodes[1].Stop()
-	nodes[0].Stop()
+	nodes[2].Stop(ctx)
+	nodes[1].Stop(ctx)
+	nodes[0].Stop(ctx)
 }

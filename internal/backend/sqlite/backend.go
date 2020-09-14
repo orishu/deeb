@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/etcd-io/etcd/raft"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/orishu/deeb/internal/backend"
@@ -17,14 +18,15 @@ import (
 	"go.uber.org/zap"
 )
 
-func New(dbDir string, logger *zap.SugaredLogger) backend.DBBackend {
-	return &Backend{
+func New(dbDir string, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
+	b := &Backend{
 		dbDir:      dbDir,
 		dbPath:     fmt.Sprintf("%s/db.sqlite", dbDir),
 		mgmtDBPath: fmt.Sprintf("%s/mgmt.sqlite", dbDir),
 		raftDBPath: fmt.Sprintf("%s/raft.sqlite", dbDir),
 		logger:     logger,
 	}
+	return b, b
 }
 
 // Backend is the sqlite backend
@@ -42,6 +44,10 @@ type Backend struct {
 // Implementation of the backend.DBBackend interace
 
 func (b *Backend) Start(ctx context.Context) error {
+	return b.innerStart(ctx, true)
+}
+
+func (b *Backend) innerStart(ctx context.Context, create bool) error {
 	db, err := sql.Open("sqlite3", b.dbPath)
 	if err != nil {
 		return errors.Wrapf(err, "opening db at %s", b.dbPath)
@@ -57,7 +63,13 @@ func (b *Backend) Start(ctx context.Context) error {
 		return errors.Wrapf(err, "opening raft db at %s", b.raftDBPath)
 	}
 	b.raftdb = raftdb
+	if !create {
+		return nil
+	}
+	return b.createTables(ctx)
+}
 
+func (b *Backend) createTables(ctx context.Context) error {
 	query := `CREATE TABLE IF NOT EXISTS state (
 			idx INTEGER NOT NULL,
 			term INTEGER NOT NULL,
@@ -65,7 +77,7 @@ func (b *Backend) Start(ctx context.Context) error {
 			hardstate_vote INTEGER NOT NULL,
 			hardstate_commit INTEGER NOT NULL,
 			confstate BLOB)`
-	_, err = b.raftdb.ExecContext(ctx, query)
+	_, err := b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating state table")
 	}
@@ -97,11 +109,12 @@ func (b *Backend) Start(ctx context.Context) error {
 			idx INTEGER PRIMARY KEY,
 			term INTEGER NOT NULL,
 			type INTEGER NOT NULL,
-			data BLOB NOT NULL) WITHOUT ROWID`
+			data BLOB) WITHOUT ROWID`
 	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating entries table")
 	}
+
 	return nil
 }
 
@@ -197,7 +210,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	restarted := false
 	defer func() {
 		if !restarted {
-			b.Start(ctx)
+			b.innerStart(ctx, false)
 		}
 	}()
 	tr := tar.NewReader(bytes.NewReader(snap.Data))
@@ -222,7 +235,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		f.Close()
 	}
 
-	if err := b.Start(ctx); err != nil {
+	if err := b.innerStart(ctx, false); err != nil {
 		return errors.Wrap(err, "restarting databases after applying snapshot")
 	}
 	restarted = true

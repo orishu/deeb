@@ -4,11 +4,14 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"database/sql"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/etcd-io/etcd/raft"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -40,14 +43,21 @@ func (b *Backend) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries returns a slice of log entries in the range [lo,hi).
 func (b *Backend) Entries(lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry, error) {
 	ctx := context.Background()
+	result := []raftpb.Entry{}
 	query := `SELECT idx, term, type, data FROM entries
-			WHERE idx >= ? AND idx < ? LIMIT ?`
-	result := make([]raftpb.Entry, 0, maxSize)
-	rows, err := b.raftdb.QueryContext(ctx, query, lo, hi, maxSize)
+			WHERE idx >= ? AND idx < ? ORDER BY idx ASC`
+	var rows *sql.Rows
+	var err error
+	if maxSize != math.MaxUint64 {
+		rows, err = b.raftdb.QueryContext(ctx, query+" LIMIT ?", lo, hi, maxSize)
+	} else {
+		rows, err = b.raftdb.QueryContext(ctx, query, lo, hi)
+	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "querying entries [%d,%d) limit %d", lo, hi, maxSize)
 	}
 	defer rows.Close()
+	var loIdx, hiIdx uint64
 	for rows.Next() {
 		entry := raftpb.Entry{}
 		err = rows.Scan(&entry.Index, &entry.Term, &entry.Type, &entry.Data)
@@ -55,6 +65,16 @@ func (b *Backend) Entries(lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry,
 			return nil, errors.Wrap(err, "reading rows")
 		}
 		result = append(result, entry)
+		if loIdx == 0 {
+			loIdx = entry.Index
+		}
+		hiIdx = entry.Index
+	}
+	if lo < loIdx {
+		return nil, raft.ErrCompacted
+	}
+	if hi > hiIdx+1 {
+		return nil, raft.ErrUnavailable
 	}
 	return result, nil
 }
@@ -64,15 +84,29 @@ func (b *Backend) Entries(lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry,
 // FirstIndex is retained for matching purposes even though the
 // rest of that entry may not be available.
 func (b *Backend) Term(i uint64) (uint64, error) {
+	if i == 0 {
+		return 0, nil
+	}
 	ctx := context.Background()
 	query := `SELECT term FROM entries WHERE idx = ?`
-	return queryInteger(ctx, b.raftdb, query, i)
+	term, err := queryInteger(ctx, b.raftdb, query, i)
+	if err == sql.ErrNoRows {
+		firstIdx, _ := b.FirstIndex()
+		if i < firstIdx {
+			return 0, raft.ErrCompacted
+		}
+		return 0, raft.ErrUnavailable
+	}
+	if err != nil {
+		return 0, err
+	}
+	return term, nil
 }
 
 // LastIndex returns the index of the last entry in the log.
 func (b *Backend) LastIndex() (uint64, error) {
 	ctx := context.Background()
-	query := `SELECT max(idx) FROM entries`
+	query := `SELECT ifnull(max(idx),0) FROM entries`
 	return queryInteger(ctx, b.raftdb, query)
 }
 
@@ -81,7 +115,7 @@ func (b *Backend) LastIndex() (uint64, error) {
 // into the latest Snapshot
 func (b *Backend) FirstIndex() (uint64, error) {
 	ctx := context.Background()
-	query := `SELECT min(idx) FROM entries`
+	query := `SELECT ifnull(min(idx),1) FROM entries`
 	return queryInteger(ctx, b.raftdb, query)
 }
 

@@ -39,6 +39,13 @@ func (tm *TransportManager) RegisterDestCallback(id uint64, callback RaftCallbac
 	tm.destMap[id] = callback
 }
 
+// UnregisterDestCallback unregisters a node ID from delivering incoming messages.
+func (tm *TransportManager) UnregisterDestCallback(id uint64) {
+	tm.mutex.Lock()
+	defer tm.mutex.Unlock()
+	delete(tm.destMap, id)
+}
+
 // DeliverMessage processes incoming message by calling the registered
 // destination's callback.
 func (tm *TransportManager) DeliverMessage(ctx context.Context, m *raftpb.Message) error {

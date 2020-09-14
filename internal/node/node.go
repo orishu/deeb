@@ -7,7 +7,9 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
+	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/transport"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +17,7 @@ import (
 type Node struct {
 	config         raft.Config
 	raftNode       raft.Node
-	storage        *raft.MemoryStorage
+	backend        backend.DBBackend
 	done           chan bool
 	peerManager    *transport.PeerManager
 	transportMgr   *transport.TransportManager
@@ -44,10 +46,10 @@ func New(
 	params NodeParams,
 	peerManager *transport.PeerManager,
 	transportMgr *transport.TransportManager,
+	storage raft.Storage,
+	backend backend.DBBackend,
 	logger *zap.SugaredLogger,
 ) *Node {
-	storage := raft.NewMemoryStorage()
-
 	c := raft.Config{
 		ID:              params.NodeID,
 		ElectionTick:    10,
@@ -59,7 +61,7 @@ func New(
 
 	return &Node{
 		config:         c,
-		storage:        storage,
+		backend:        backend,
 		done:           make(chan bool),
 		peerManager:    peerManager,
 		transportMgr:   transportMgr,
@@ -71,19 +73,25 @@ func New(
 }
 
 // Start runs the main Raft loop
-func (n *Node) Start(ctx context.Context) {
+func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting node")
+
+	if err := n.backend.Start(ctx); err != nil {
+		return errors.Wrap(err, "starting backend")
+	}
+
 	var peers []raft.Peer
 	if n.isNewCluster {
 		b, err := json.Marshal(n.nodeInfo)
 		if err != nil {
-			panic(err)
+			return errors.Wrap(err, "marshalling nodeInfo")
 		}
 		peers = []raft.Peer{{ID: n.config.ID, Context: b}}
 	}
-	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
+	// TODO: load peers from the database
 	n.discoverPotentialPeers(ctx, n.potentialPeers)
 	n.raftNode = raft.StartNode(&n.config, peers)
+	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -94,7 +102,7 @@ func (n *Node) Start(ctx context.Context) {
 		case <-ticker.C:
 			n.raftNode.Tick()
 		case rd := <-n.raftNode.Ready():
-			n.saveToStorage(rd.HardState, rd.Entries, rd.Snapshot)
+			n.saveToStorage(ctx, rd.HardState, rd.Entries, rd.Snapshot)
 			n.sendMessages(ctx, rd.Messages)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				////        processSnapshot(rd.Snapshot)
@@ -110,6 +118,9 @@ func (n *Node) Start(ctx context.Context) {
 					err := n.processConfChange(ctx, cc)
 					if err == nil {
 						state := n.raftNode.ApplyConfChange(cc)
+						if err := n.backend.SaveConfState(ctx, state); err != nil {
+							n.logger.Errorf("failed saving conf state: %+v", err)
+						}
 						n.logger.Infof("new Raft state: %#v", state)
 					} else {
 						n.logger.Errorf("failed processing conf change: %+v", err)
@@ -122,10 +133,14 @@ func (n *Node) Start(ctx context.Context) {
 		}
 	}
 	_ = n.peerManager.Close()
+	n.transportMgr.UnregisterDestCallback(n.config.ID)
+	n.raftNode.Stop()
+	n.backend.Stop(ctx)
+	return nil
 }
 
 // Stop stops the main Raft loop
-func (n *Node) Stop() {
+func (n *Node) Stop(ctx context.Context) {
 	n.done <- true
 }
 
@@ -136,6 +151,9 @@ func (n *Node) GetID() uint64 {
 
 // Propose proposes Raft data to the cluster.
 func (n *Node) Propose(ctx context.Context, data []byte) error {
+	if n.raftNode == nil {
+		return errors.New("node not started yet")
+	}
 	return n.raftNode.Propose(ctx, data)
 }
 
@@ -162,10 +180,17 @@ func (n *Node) handleRaftRPC(ctx context.Context, m *raftpb.Message) error {
 	return n.raftNode.Step(ctx, *m)
 }
 
-func (n *Node) saveToStorage(hardState raftpb.HardState, entries []raftpb.Entry, snap raftpb.Snapshot) {
-	_ = n.storage.Append(entries)
-	_ = n.storage.SetHardState(hardState)
-	_ = n.storage.ApplySnapshot(snap)
+func (n *Node) saveToStorage(
+	ctx context.Context,
+	hardState raftpb.HardState,
+	entries []raftpb.Entry,
+	snap raftpb.Snapshot,
+) {
+	_ = n.backend.AppendEntries(ctx, entries)
+	_ = n.backend.SaveHardState(ctx, &hardState)
+	if len(snap.Data) > 0 {
+		_ = n.backend.ApplySnapshot(ctx, snap)
+	}
 }
 
 func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) error {
@@ -174,6 +199,7 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 	}
 	if cc.Type == raftpb.ConfChangeRemoveNode {
 		n.peerManager.RemovePeer(ctx, cc.ID)
+		n.backend.RemovePeer(ctx, cc.ID)
 		return nil
 	}
 
@@ -187,6 +213,10 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 		Addr:   nodeInfo.Addr,
 		Port:   nodeInfo.Port,
 	})
+	if err != nil {
+		return err
+	}
+	err = n.backend.UpsertPeer(ctx, cc.ID, nodeInfo.Addr, nodeInfo.Port)
 	return err
 }
 

@@ -3,12 +3,16 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // AddNode adds a new member to the Raft node set.
 func (n *Node) AddNode(ctx context.Context, nodeID uint64, nodeInfo NodeInfo) error {
+	if n.raftNode == nil {
+		return fmt.Errorf("node %d not started yet", nodeID)
+	}
 	nodeInfoBytes, err := json.Marshal(nodeInfo)
 	if err != nil {
 		return err
