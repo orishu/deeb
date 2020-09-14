@@ -103,16 +103,17 @@ func Test_basic_sqlite_access(t *testing.T) {
 	_, cs, err = st.InitialState()
 	require.NoError(t, err)
 
-	// Override conf state before restoring from snapshot.
+	// Override conf state before restoring from snapshot
 	err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{13, 14}, Learners: []uint64{15}})
 	require.NoError(t, err)
 
-	// Use the remembered conf state as snapshot metadata
+	// Restore from snapshot, use the remembered conf state as metadata
 	snapMeta := raftpb.SnapshotMetadata{Term: 30, Index: 300, ConfState: cs}
 	snap2 := raftpb.Snapshot{Data: buf.Bytes(), Metadata: snapMeta}
 	err = b.ApplySnapshot(ctx, snap2)
 	require.NoError(t, err)
 
+	// Check that the overriden conf state is back
 	_, cs, err = st.InitialState()
 	require.NoError(t, err)
 	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
