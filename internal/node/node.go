@@ -88,9 +88,32 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 		peers = []raft.Peer{{ID: n.config.ID, Context: b}}
 	}
-	// TODO: load peers from the database
+	if err := n.loadStoredPeers(ctx); err != nil {
+		n.logger.Errorf("failed loading stored peers: %+v", err)
+	}
 	n.discoverPotentialPeers(ctx, n.potentialPeers)
 	n.raftNode = raft.StartNode(&n.config, peers)
+	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
+
+	go func() { n.runMainLoop(ctx) }()
+	return nil
+}
+
+// Restart runs the main Raft loop for a existing but stopped node.
+func (n *Node) Restart(ctx context.Context) error {
+	n.logger.Info("restarting node")
+
+	if err := n.backend.Start(ctx); err != nil {
+		return errors.Wrap(err, "starting backend")
+	}
+	if n.isNewCluster {
+		return errors.New("cannot restart a new cluster")
+	}
+	if err := n.loadStoredPeers(ctx); err != nil {
+		n.logger.Errorf("failed loading stored peers: %+v", err)
+	}
+	n.discoverPotentialPeers(ctx, n.potentialPeers)
+	n.raftNode = raft.RestartNode(&n.config)
 	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
 	go func() { n.runMainLoop(ctx) }()
@@ -220,12 +243,30 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 	if err != nil {
 		return err
 	}
-	err = n.backend.UpsertPeer(ctx, cc.ID, nodeInfo.Addr, nodeInfo.Port)
+	err = n.backend.UpsertPeer(ctx, backend.PeerInfo{cc.ID, nodeInfo.Addr, nodeInfo.Port})
 	return err
 }
 
 func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
-	n.logger.Infof("Incoming data: %s", string(data))
+	n.logger.Infof("Incoming data seen by node %d: %s", n.config.ID, string(data))
+	return nil
+}
+
+func (n *Node) loadStoredPeers(ctx context.Context) error {
+	peers, err := n.backend.LoadPeers(ctx)
+	if err != nil {
+		return errors.Wrap(err, "loading peers from backend")
+	}
+	for _, p := range peers {
+		err := n.peerManager.UpsertPeer(ctx, transport.PeerParams{
+			NodeID: p.NodeID,
+			Addr:   p.Addr,
+			Port:   p.Port,
+		})
+		if err != nil {
+			return errors.Wrap(err, "upserting peers")
+		}
+	}
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/stretchr/testify/require"
 )
@@ -62,10 +63,16 @@ func Test_basic_sqlite_access(t *testing.T) {
 	err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}})
 	require.NoError(t, err)
 
-	err = b.UpsertPeer(ctx, 3, "localhost", "10000")
+	err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"})
 	require.NoError(t, err)
-	err = b.UpsertPeer(ctx, 4, "localhost", "10001")
+	err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"})
 	require.NoError(t, err)
+	peerInfos, err := b.LoadPeers(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(peerInfos))
+	require.Equal(t, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"}, peerInfos[0])
+	require.Equal(t, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"}, peerInfos[1])
+
 	err = b.RemovePeer(ctx, 3)
 	require.NoError(t, err)
 

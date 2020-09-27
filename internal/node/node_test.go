@@ -12,55 +12,23 @@ import (
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/orishu/deeb/internal/transport"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	logger := lib.NewDevelopmentLogger()
-	inprocessReg := transport.NewInProcessRegistry()
 	dir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
+	inprocessReg := transport.NewInProcessRegistry()
 	nodeInfos := []NodeInfo{
 		NodeInfo{Addr: "localhost", Port: "10000"},
 		NodeInfo{Addr: "localhost", Port: "10001"},
 		NodeInfo{Addr: "localhost", Port: "10002"},
 	}
-	nodeParams := []NodeParams{
-		{
-			NodeID:         100,
-			AddrPort:       nodeInfos[0],
-			IsNewCluster:   true,
-			PotentialPeers: []NodeInfo{nodeInfos[1], nodeInfos[2]},
-		},
-		{
-			NodeID:         101,
-			AddrPort:       nodeInfos[1],
-			PotentialPeers: []NodeInfo{nodeInfos[0], nodeInfos[2]},
-		},
-		{
-			NodeID:         102,
-			AddrPort:       nodeInfos[2],
-			PotentialPeers: []NodeInfo{nodeInfos[0], nodeInfos[1]},
-		},
-	}
-	nodes := make([]*Node, 0, len(nodeParams))
-	for i, np := range nodeParams {
-		transportMgr := transport.NewTransportManager(transport.NewInProcessClientFactory(inprocessReg))
-		inprocessReg.Register(transportMgr, np.AddrPort.Addr, np.AddrPort.Port, np.NodeID)
-		nodeDir := fmt.Sprintf("%s/db%d", dir, i)
-		os.Mkdir(nodeDir, 0755)
-		be, st := sqlite.New(nodeDir, logger)
-		n := New(
-			np,
-			transport.NewPeerManager(transportMgr),
-			transportMgr,
-			st,
-			be,
-			logger,
-		)
-		nodes = append(nodes, n)
-	}
+	nodeParams := createNodeParams(nodeInfos)
+	nodes := createNodes(t, dir, nodeParams, inprocessReg, logger)
 
 	ctx := context.Background()
 
@@ -82,11 +50,75 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 
 	nodes[1].Propose(ctx, []byte("some data proposed by node1"))
 	time.Sleep(1 * time.Second)
+
+	// Stop node0
+	nodes[0].Stop(ctx)
+	time.Sleep(1 * time.Second)
+
+	// Propose data while node0 is down
 	nodes[2].Propose(ctx, []byte("some data proposed by node2"))
+	time.Sleep(1 * time.Second)
+
+	// Restart node0 with the existing directory db0
+	node0Dir := fmt.Sprintf("%s/db0", dir)
+	nodes[0] = createNode(node0Dir, NodeParams{NodeID: 100, AddrPort: nodeInfos[0]}, inprocessReg, logger)
+	err = nodes[0].Restart(ctx)
+	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
 	require.Equal(t, uint64(100), nodes[0].GetID())
 	nodes[2].Stop(ctx)
 	nodes[1].Stop(ctx)
 	nodes[0].Stop(ctx)
+}
+
+func createNodeParams(nodeInfos []NodeInfo) []NodeParams {
+	return []NodeParams{
+		{
+			NodeID:         100,
+			AddrPort:       nodeInfos[0],
+			IsNewCluster:   true,
+			PotentialPeers: []NodeInfo{nodeInfos[1], nodeInfos[2]},
+		},
+		{
+			NodeID:         101,
+			AddrPort:       nodeInfos[1],
+			PotentialPeers: []NodeInfo{nodeInfos[0], nodeInfos[2]},
+		},
+		{
+			NodeID:         102,
+			AddrPort:       nodeInfos[2],
+			PotentialPeers: []NodeInfo{nodeInfos[0], nodeInfos[1]},
+		},
+	}
+}
+
+func createNodes(
+	t *testing.T,
+	dir string,
+	nodeParams []NodeParams,
+	inprocessReg *transport.InProcessRegistry,
+	logger *zap.SugaredLogger,
+) []*Node {
+	nodes := make([]*Node, 0, len(nodeParams))
+	for i, np := range nodeParams {
+		nodeDir := fmt.Sprintf("%s/db%d", dir, i)
+		n := createNode(nodeDir, np, inprocessReg, logger)
+		nodes = append(nodes, n)
+	}
+	return nodes
+}
+
+func createNode(
+	nodeDir string,
+	np NodeParams,
+	inprocessReg *transport.InProcessRegistry,
+	logger *zap.SugaredLogger,
+) *Node {
+	transportMgr := transport.NewTransportManager(transport.NewInProcessClientFactory(inprocessReg))
+	inprocessReg.Register(transportMgr, np.AddrPort.Addr, np.AddrPort.Port, np.NodeID)
+	os.Mkdir(nodeDir, 0755)
+	be, st := sqlite.New(nodeDir, logger)
+	peerMgr := transport.NewPeerManager(transportMgr)
+	return New(np, peerMgr, transportMgr, st, be, logger)
 }

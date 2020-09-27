@@ -6,6 +6,12 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
+type PeerInfo struct {
+	NodeID uint64
+	Addr   string
+	Port   string
+}
+
 type DBBackend interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context)
@@ -14,6 +20,7 @@ type DBBackend interface {
 	SaveHardState(ctx context.Context, hardState *raftpb.HardState) error
 	SaveConfState(ctx context.Context, confState *raftpb.ConfState) error
 	ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
-	UpsertPeer(ctx context.Context, nodeID uint64, addr string, port string) error
+	LoadPeers(ctx context.Context) ([]PeerInfo, error)
+	UpsertPeer(ctx context.Context, peerInfo PeerInfo) error
 	RemovePeer(ctx context.Context, nodeID uint64) error
 }

@@ -187,9 +187,27 @@ func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState
 	return nil
 }
 
-func (b *Backend) UpsertPeer(ctx context.Context, nodeID uint64, addr string, port string) error {
+func (b *Backend) LoadPeers(ctx context.Context) ([]backend.PeerInfo, error) {
+	query := `SELECT nodeid, address, port FROM peers`
+	rows, err := b.mgmtdb.QueryContext(ctx, query)
+	if err != nil {
+		return nil, errors.Wrapf(err, "query: %s", query)
+	}
+	res := make([]backend.PeerInfo, 0)
+	for rows.Next() {
+		var pi backend.PeerInfo
+		err := rows.Scan(&pi.NodeID, &pi.Addr, &pi.Port)
+		if err != nil {
+			return nil, errors.Wrapf(err, "scanning row of query: %s", query)
+		}
+		res = append(res, pi)
+	}
+	return res, nil
+}
+
+func (b *Backend) UpsertPeer(ctx context.Context, pi backend.PeerInfo) error {
 	query := `REPLACE INTO peers (nodeid, address, port) VALUES (?,?,?)`
-	_, err := b.mgmtdb.ExecContext(ctx, query, nodeID, addr, port)
+	_, err := b.mgmtdb.ExecContext(ctx, query, pi.NodeID, pi.Addr, pi.Port)
 	if err != nil {
 		return errors.Wrap(err, "upserting peer")
 	}
