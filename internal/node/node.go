@@ -93,6 +93,11 @@ func (n *Node) Start(ctx context.Context) error {
 	n.raftNode = raft.StartNode(&n.config, peers)
 	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
+	go func() { n.runMainLoop(ctx) }()
+	return nil
+}
+
+func (n *Node) runMainLoop(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -136,7 +141,6 @@ func (n *Node) Start(ctx context.Context) error {
 	n.transportMgr.UnregisterDestCallback(n.config.ID)
 	n.raftNode.Stop()
 	n.backend.Stop(ctx)
-	return nil
 }
 
 // Stop stops the main Raft loop

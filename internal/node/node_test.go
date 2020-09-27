@@ -64,27 +64,20 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 
 	ctx := context.Background()
 
-	go func() {
-		err := nodes[0].Start(ctx)
-		require.NoError(t, err)
-	}()
+	err = nodes[0].Start(ctx)
+	require.NoError(t, err)
 
 	time.Sleep(1 * time.Second)
 	nodes[0].AddNode(ctx, 101, nodeInfos[1])
 
-	go func() {
-		err := nodes[1].Start(ctx)
-		require.NoError(t, err)
-	}()
+	err = nodes[1].Start(ctx)
+	require.NoError(t, err)
 
 	time.Sleep(1 * time.Second)
 	nodes[1].AddNode(ctx, 102, nodeInfos[2])
 
-	go func() {
-		err := nodes[2].Start(ctx)
-		require.NoError(t, err)
-	}()
-
+	err = nodes[2].Start(ctx)
+	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
 	nodes[1].Propose(ctx, []byte("some data proposed by node1"))
