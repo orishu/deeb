@@ -270,6 +270,18 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	return nil
 }
 
+func (b *Backend) ExecSQL(ctx context.Context, sql string) error {
+	_, err := b.db.ExecContext(ctx, sql)
+	if err != nil {
+		return errors.Wrapf(err, "executing sql: %s", sql)
+	}
+	return nil
+}
+
+func (b *Backend) QuerySQL(ctx context.Context, sql string) (*sql.Rows, error) {
+	return b.db.QueryContext(ctx, sql)
+}
+
 func queryInteger(ctx context.Context, db *sql.DB, query string, args ...interface{}) (uint64, error) {
 	row := db.QueryRowContext(ctx, query, args...)
 	var result uint64

@@ -197,8 +197,8 @@ func (n *Node) WriteQuery(ctx context.Context, sql string) error {
 	}
 
 	select {
-	case <-ch:
-		return nil
+	case err := <-ch:
+		return err
 	case <-ctx.Done():
 		n.pendingWrites.Remove(chid)
 		return ctx.Err()
@@ -285,11 +285,15 @@ func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
 	if err := query.Unmarshal(data); err != nil {
 		return errors.Wrap(err, "unmarshaling committed data")
 	}
+	err := n.backend.ExecSQL(ctx, query.Sql)
+	if err != nil {
+		n.logger.Errorf("error %+v executing committed command: %s", err, query.Sql)
+	}
 	n.logger.Infof("Incoming data seen by node %d: %s", n.config.ID, query.Sql)
 	if query.NodeID == n.config.ID {
 		if ch := n.pendingWrites.Remove(query.QueryID); ch != nil {
 			n.logger.Infof("Releasing pending write; node %d: %s", n.config.ID, query.Sql)
-			ch <- 1
+			ch <- err
 		}
 	}
 	return nil

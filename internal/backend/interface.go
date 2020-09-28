@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -23,4 +24,6 @@ type DBBackend interface {
 	LoadPeers(ctx context.Context) ([]PeerInfo, error)
 	UpsertPeer(ctx context.Context, peerInfo PeerInfo) error
 	RemovePeer(ctx context.Context, nodeID uint64) error
+	ExecSQL(ctx context.Context, sql string) error
+	QuerySQL(ctx context.Context, sql string) (*sql.Rows, error)
 }

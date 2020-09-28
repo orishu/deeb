@@ -48,10 +48,10 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
-	err = nodes[1].WriteQuery(ctx, "some data1 proposed by node1")
+	err = nodes[1].WriteQuery(ctx, "CREATE TABLE table1 (f1 INTEGER, f2 TEXT)")
 	require.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
-	err = nodes[1].WriteQuery(ctx, "some data2 proposed by node1")
+	err = nodes[1].WriteQuery(ctx, `INSERT INTO table1 (f1, f2) VALUES (10, "ten"), (20, "twenty")`)
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
@@ -60,7 +60,7 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Propose data while node0 is down
-	err = nodes[2].WriteQuery(ctx, "some data3 proposed by node2")
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO table1 (f1, f2) VALUES (30, "thirty")`)
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 

@@ -122,4 +122,24 @@ func Test_basic_sqlite_access(t *testing.T) {
 	_, cs, err = st.InitialState()
 	require.NoError(t, err)
 	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
+
+	err = b.ExecSQL(ctx, "CREATE TABLE table1 (col1 INTEGER, col2 INTEGER)")
+	require.NoError(t, err)
+	err = b.ExecSQL(ctx, "INSERT INTO table1 (col1, col2) VALUES (100, 200), (101, 201)")
+	require.NoError(t, err)
+	rows, err := b.QuerySQL(ctx, "SELECT col1, col2 FROM table1")
+	require.NoError(t, err)
+	require.True(t, rows.Next())
+	var v1, v2 int
+	err = rows.Scan(&v1, &v2)
+	require.NoError(t, err)
+	require.Equal(t, 100, v1)
+	require.Equal(t, 200, v2)
+	require.True(t, rows.Next())
+	err = rows.Scan(&v1, &v2)
+	require.NoError(t, err)
+	require.Equal(t, 101, v1)
+	require.Equal(t, 201, v2)
+	require.False(t, rows.Next())
+
 }
