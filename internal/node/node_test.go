@@ -48,15 +48,20 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
-	nodes[1].Propose(ctx, []byte("some data proposed by node1"))
+	err = nodes[1].WriteQuery(ctx, "some data1 proposed by node1")
+	require.NoError(t, err)
+	time.Sleep(100 * time.Millisecond)
+	err = nodes[1].WriteQuery(ctx, "some data2 proposed by node1")
+	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
 	// Stop node0
 	nodes[0].Stop(ctx)
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Propose data while node0 is down
-	nodes[2].Propose(ctx, []byte("some data proposed by node2"))
+	err = nodes[2].WriteQuery(ctx, "some data3 proposed by node2")
+	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
 	// Restart node0 with the existing directory db0

@@ -7,7 +7,9 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
+	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/backend"
+	"github.com/orishu/deeb/internal/lib"
 	"github.com/orishu/deeb/internal/transport"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -25,6 +27,7 @@ type Node struct {
 	potentialPeers []NodeInfo
 	isNewCluster   bool
 	logger         *zap.SugaredLogger
+	pendingWrites  *lib.ChannelPool
 }
 
 // NodeInfo groups the node's metadata outside of its Raft configuration
@@ -69,6 +72,7 @@ func New(
 		potentialPeers: params.PotentialPeers,
 		isNewCluster:   params.IsNewCluster,
 		logger:         logger,
+		pendingWrites:  lib.NewChannelPool(),
 	}
 }
 
@@ -176,8 +180,33 @@ func (n *Node) GetID() uint64 {
 	return n.config.ID
 }
 
-// Propose proposes Raft data to the cluster.
-func (n *Node) Propose(ctx context.Context, data []byte) error {
+// RunWriteQuery proposes a write query to the Raft data and synchronuously
+// waits for the data to be committed.
+func (n *Node) WriteQuery(ctx context.Context, sql string) error {
+	chid, ch := n.pendingWrites.GetNewChannel()
+	q := pb.WriteQuery{NodeID: n.config.ID, QueryID: uint64(chid), Sql: sql}
+	data, err := q.Marshal()
+	if err != nil {
+		n.pendingWrites.Remove(chid)
+		return errors.Wrapf(err, "marshaling sql %s", sql)
+	}
+	err = n.propose(ctx, data)
+	if err != nil {
+		n.pendingWrites.Remove(chid)
+		return errors.Wrapf(err, "proposing sql %s", sql)
+	}
+
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		n.pendingWrites.Remove(chid)
+		return ctx.Err()
+	}
+}
+
+// propose proposes Raft data to the cluster.
+func (n *Node) propose(ctx context.Context, data []byte) error {
 	if n.raftNode == nil {
 		return errors.New("node not started yet")
 	}
@@ -243,12 +272,26 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 	if err != nil {
 		return err
 	}
-	err = n.backend.UpsertPeer(ctx, backend.PeerInfo{cc.ID, nodeInfo.Addr, nodeInfo.Port})
+	err = n.backend.UpsertPeer(ctx, backend.PeerInfo{
+		NodeID: cc.ID,
+		Addr:   nodeInfo.Addr,
+		Port:   nodeInfo.Port,
+	})
 	return err
 }
 
 func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
-	n.logger.Infof("Incoming data seen by node %d: %s", n.config.ID, string(data))
+	var query pb.WriteQuery
+	if err := query.Unmarshal(data); err != nil {
+		return errors.Wrap(err, "unmarshaling committed data")
+	}
+	n.logger.Infof("Incoming data seen by node %d: %s", n.config.ID, query.Sql)
+	if query.NodeID == n.config.ID {
+		if ch := n.pendingWrites.Remove(query.QueryID); ch != nil {
+			n.logger.Infof("Releasing pending write; node %d: %s", n.config.ID, query.Sql)
+			ch <- 1
+		}
+	}
 	return nil
 }
 

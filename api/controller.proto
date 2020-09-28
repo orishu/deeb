@@ -74,3 +74,9 @@ message AddPeerRequest {
 message GetIDResponse {
     	uint64 id = 1;
 }
+
+message WriteQuery {
+	uint64 nodeID = 1;
+	uint64 queryID = 2;
+	string sql = 3;
+}
