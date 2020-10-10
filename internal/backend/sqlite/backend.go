@@ -174,6 +174,15 @@ func (b *Backend) SaveApplied(ctx context.Context, Term uint64, Index uint64) er
 	return nil
 }
 
+func (b *Backend) GetAppliedIndex(ctx context.Context) (uint64, error) {
+	query := `SELECT idx FROM state WHERE rowid = 1`
+	idx, err := queryInteger(ctx, b.raftdb, query)
+	if err != nil {
+		return 0, errors.Wrap(err, "getting applied index")
+	}
+	return idx, nil
+}
+
 func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState) error {
 	query := `UPDATE state SET confstate = ? WHERE rowid = 1`
 	d, err := proto.Marshal(confState)
@@ -270,10 +279,14 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	return nil
 }
 
-func (b *Backend) ExecSQL(ctx context.Context, sql string) error {
+func (b *Backend) ExecSQL(ctx context.Context, term uint64, idx uint64, sql string) error {
 	_, err := b.db.ExecContext(ctx, sql)
 	if err != nil {
 		return errors.Wrapf(err, "executing sql: %s", sql)
+	}
+	err = b.SaveApplied(ctx, term, idx)
+	if err != nil {
+		return errors.Wrap(err, "saving term and index")
 	}
 	return nil
 }

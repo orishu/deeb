@@ -117,6 +117,11 @@ func (n *Node) Restart(ctx context.Context) error {
 		n.logger.Errorf("failed loading stored peers: %+v", err)
 	}
 	n.discoverPotentialPeers(ctx, n.potentialPeers)
+	applied, err := n.backend.GetAppliedIndex(ctx)
+	if err != nil {
+		return errors.Wrap(err, "getting applied index for node restart")
+	}
+	n.config.Applied = applied
 	n.raftNode = raft.RestartNode(&n.config)
 	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
@@ -142,7 +147,7 @@ func (n *Node) runMainLoop(ctx context.Context) {
 			}
 			for _, entry := range rd.CommittedEntries {
 				if entry.Type == raftpb.EntryNormal && len(entry.Data) > 0 {
-					n.processCommittedData(ctx, entry.Data)
+					n.processCommittedData(ctx, entry)
 				}
 				if entry.Type == raftpb.EntryConfChange {
 					var cc raftpb.ConfChange
@@ -180,7 +185,7 @@ func (n *Node) GetID() uint64 {
 	return n.config.ID
 }
 
-// RunWriteQuery proposes a write query to the Raft data and synchronuously
+// WriteQuery proposes a write query to the Raft data and synchronuously
 // waits for the data to be committed.
 func (n *Node) WriteQuery(ctx context.Context, sql string) error {
 	chid, ch := n.pendingWrites.GetNewChannel()
@@ -243,7 +248,9 @@ func (n *Node) saveToStorage(
 	snap raftpb.Snapshot,
 ) {
 	_ = n.backend.AppendEntries(ctx, entries)
-	_ = n.backend.SaveHardState(ctx, &hardState)
+	if !raft.IsEmptyHardState(hardState) {
+		_ = n.backend.SaveHardState(ctx, &hardState)
+	}
 	if len(snap.Data) > 0 {
 		_ = n.backend.ApplySnapshot(ctx, snap)
 	}
@@ -280,12 +287,12 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 	return err
 }
 
-func (n *Node) processCommittedData(ctx context.Context, data []byte) error {
+func (n *Node) processCommittedData(ctx context.Context, entry raftpb.Entry) error {
 	var query pb.WriteQuery
-	if err := query.Unmarshal(data); err != nil {
+	if err := query.Unmarshal(entry.Data); err != nil {
 		return errors.Wrap(err, "unmarshaling committed data")
 	}
-	err := n.backend.ExecSQL(ctx, query.Sql)
+	err := n.backend.ExecSQL(ctx, entry.Term, entry.Index, query.Sql)
 	if err != nil {
 		n.logger.Errorf("error %+v executing committed command: %s", err, query.Sql)
 	}
