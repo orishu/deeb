@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"time"
 
@@ -208,6 +209,12 @@ func (n *Node) WriteQuery(ctx context.Context, sql string) error {
 		n.pendingWrites.Remove(chid)
 		return ctx.Err()
 	}
+}
+
+// ReadQuery runs a read query against the backend. If run on a follower node,
+// it may not return the latest data.
+func (n *Node) ReadQuery(ctx context.Context, sql string) (*sql.Rows, error) {
+	return n.backend.QuerySQL(ctx, sql)
 }
 
 // propose proposes Raft data to the cluster.

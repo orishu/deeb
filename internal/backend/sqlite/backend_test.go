@@ -20,7 +20,7 @@ func Test_basic_sqlite_access(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	require.NoError(t, err)
-	b, st := New(Params{DBDir: dir}, lib.NewDevelopmentLogger())
+	b, st := New(Params{DBDir: dir, EntriesToRetain: 5}, lib.NewDevelopmentLogger())
 	ctx := context.Background()
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
@@ -142,4 +142,18 @@ func Test_basic_sqlite_access(t *testing.T) {
 	require.Equal(t, 201, v2)
 	require.False(t, rows.Next())
 
+	// Append some more entries to see older ones deleted
+	err = b.AppendEntries(ctx, []raftpb.Entry{
+		{Index: 5, Term: 2, Type: raftpb.EntryNormal, Data: []byte("one")},
+		{Index: 6, Term: 2, Type: raftpb.EntryNormal, Data: []byte("two")},
+		{Index: 7, Term: 2, Type: raftpb.EntryNormal, Data: []byte("three")},
+	})
+	require.NoError(t, err)
+
+	minIdx, err = st.FirstIndex()
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), minIdx)
+	maxIdx, err = st.LastIndex()
+	require.NoError(t, err)
+	require.Equal(t, uint64(7), maxIdx)
 }

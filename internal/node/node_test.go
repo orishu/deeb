@@ -71,6 +71,42 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
+	// Check that node0 got the new row that was added while it was down
+	rows, err := nodes[0].ReadQuery(ctx, `SELECT f2 FROM table1 WHERE f1 = 30`)
+	require.True(t, rows.Next())
+	var value string
+	err = rows.Scan(&value)
+	require.NoError(t, err)
+	require.Equal(t, "thirty", value)
+	require.False(t, rows.Next())
+
+	// Propose some more data
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO table1 (f1, f2) VALUES (40, "forty")`)
+	require.NoError(t, err)
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO table1 (f1, f2) VALUES (50, "fifty")`)
+	require.NoError(t, err)
+	time.Sleep(1 * time.Second)
+
+	// Start a fourth node that will sync using a snapshot
+	node3Info := NodeInfo{Addr: "localhost", Port: "10003"}
+	node3Dir := fmt.Sprintf("%s/db3", dir)
+	node3Params := NodeParams{NodeID: 103, AddrPort: node3Info, PotentialPeers: nodeInfos}
+	node3 := createNode(node3Dir, node3Params, inprocessReg, logger)
+	nodes[0].AddNode(ctx, 103, node3Info)
+	time.Sleep(1 * time.Second)
+	err = node3.Start(ctx)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Check that the new node has all five rows in the table
+	rows, err = node3.ReadQuery(ctx, `SELECT count(*) FROM table1`)
+	require.True(t, rows.Next())
+	var count int
+	err = rows.Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 5, count)
+	require.False(t, rows.Next())
+
 	require.Equal(t, uint64(100), nodes[0].GetID())
 	nodes[2].Stop(ctx)
 	nodes[1].Stop(ctx)
@@ -123,7 +159,7 @@ func createNode(
 	transportMgr := transport.NewTransportManager(transport.NewInProcessClientFactory(inprocessReg))
 	inprocessReg.Register(transportMgr, np.AddrPort.Addr, np.AddrPort.Port, np.NodeID)
 	os.Mkdir(nodeDir, 0755)
-	be, st := sqlite.New(sqlite.Params{DBDir: nodeDir}, logger)
+	be, st := sqlite.New(sqlite.Params{DBDir: nodeDir, EntriesToRetain: 5}, logger)
 	peerMgr := transport.NewPeerManager(transportMgr)
 	return New(np, peerMgr, transportMgr, st, be, logger)
 }

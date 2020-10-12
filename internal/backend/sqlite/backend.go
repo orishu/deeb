@@ -19,30 +19,33 @@ import (
 )
 
 type Params struct {
-	DBDir string
+	DBDir           string
+	EntriesToRetain uint64
 }
 
 func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
 	b := &Backend{
-		dbDir:      params.DBDir,
-		dbPath:     fmt.Sprintf("%s/db.sqlite", params.DBDir),
-		mgmtDBPath: fmt.Sprintf("%s/mgmt.sqlite", params.DBDir),
-		raftDBPath: fmt.Sprintf("%s/raft.sqlite", params.DBDir),
-		logger:     logger,
+		dbDir:           params.DBDir,
+		dbPath:          fmt.Sprintf("%s/db.sqlite", params.DBDir),
+		mgmtDBPath:      fmt.Sprintf("%s/mgmt.sqlite", params.DBDir),
+		raftDBPath:      fmt.Sprintf("%s/raft.sqlite", params.DBDir),
+		entriesToRetain: params.EntriesToRetain,
+		logger:          logger,
 	}
 	return b, b
 }
 
 // Backend is the sqlite backend
 type Backend struct {
-	dbDir      string
-	dbPath     string
-	mgmtDBPath string
-	raftDBPath string
-	db         *sql.DB
-	mgmtdb     *sql.DB
-	raftdb     *sql.DB
-	logger     *zap.SugaredLogger
+	dbDir           string
+	dbPath          string
+	mgmtDBPath      string
+	raftDBPath      string
+	entriesToRetain uint64
+	db              *sql.DB
+	mgmtdb          *sql.DB
+	raftdb          *sql.DB
+	logger          *zap.SugaredLogger
 }
 
 // Implementation of the backend.DBBackend interace
@@ -135,6 +138,9 @@ func (b *Backend) Stop(ctx context.Context) {
 }
 
 func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 	for _, entry := range entries {
 		query := `INSERT INTO entries
 				(idx, term, type, data)
@@ -150,6 +156,14 @@ func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) err
 		}
 		if rows != 1 {
 			return fmt.Errorf("unexpected number of rows affected: %d", rows)
+		}
+	}
+	if b.entriesToRetain != 0 {
+		query := `DELETE FROM entries WHERE idx + ? <= ?`
+		lastIdx := entries[len(entries)-1].Index
+		_, err := b.raftdb.ExecContext(ctx, query, b.entriesToRetain, lastIdx)
+		if err != nil {
+			return errors.Wrap(err, "deleting old raft entries")
 		}
 	}
 	return nil
