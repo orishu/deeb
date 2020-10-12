@@ -18,12 +18,16 @@ import (
 	"go.uber.org/zap"
 )
 
-func New(dbDir string, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
+type Params struct {
+	DBDir string
+}
+
+func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
 	b := &Backend{
-		dbDir:      dbDir,
-		dbPath:     fmt.Sprintf("%s/db.sqlite", dbDir),
-		mgmtDBPath: fmt.Sprintf("%s/mgmt.sqlite", dbDir),
-		raftDBPath: fmt.Sprintf("%s/raft.sqlite", dbDir),
+		dbDir:      params.DBDir,
+		dbPath:     fmt.Sprintf("%s/db.sqlite", params.DBDir),
+		mgmtDBPath: fmt.Sprintf("%s/mgmt.sqlite", params.DBDir),
+		raftDBPath: fmt.Sprintf("%s/raft.sqlite", params.DBDir),
 		logger:     logger,
 	}
 	return b, b

@@ -20,7 +20,7 @@ func Test_basic_sqlite_access(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	require.NoError(t, err)
-	b, st := New(dir, lib.NewDevelopmentLogger())
+	b, st := New(Params{DBDir: dir}, lib.NewDevelopmentLogger())
 	ctx := context.Background()
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
@@ -123,9 +123,9 @@ func Test_basic_sqlite_access(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
 
-	err = b.ExecSQL(ctx, "CREATE TABLE table1 (col1 INTEGER, col2 INTEGER)")
+	err = b.ExecSQL(ctx, 1, 1, "CREATE TABLE table1 (col1 INTEGER, col2 INTEGER)")
 	require.NoError(t, err)
-	err = b.ExecSQL(ctx, "INSERT INTO table1 (col1, col2) VALUES (100, 200), (101, 201)")
+	err = b.ExecSQL(ctx, 1, 2, "INSERT INTO table1 (col1, col2) VALUES (100, 200), (101, 201)")
 	require.NoError(t, err)
 	rows, err := b.QuerySQL(ctx, "SELECT col1, col2 FROM table1")
 	require.NoError(t, err)

@@ -123,7 +123,7 @@ func createNode(
 	transportMgr := transport.NewTransportManager(transport.NewInProcessClientFactory(inprocessReg))
 	inprocessReg.Register(transportMgr, np.AddrPort.Addr, np.AddrPort.Port, np.NodeID)
 	os.Mkdir(nodeDir, 0755)
-	be, st := sqlite.New(nodeDir, logger)
+	be, st := sqlite.New(sqlite.Params{DBDir: nodeDir}, logger)
 	peerMgr := transport.NewPeerManager(transportMgr)
 	return New(np, peerMgr, transportMgr, st, be, logger)
 }

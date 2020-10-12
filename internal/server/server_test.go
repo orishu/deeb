@@ -2,10 +2,14 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"os"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/orishu/deeb/internal/backend/sqlite"
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/transport"
@@ -18,6 +22,10 @@ import (
 )
 
 func Test_basic_server_operation(t *testing.T) {
+	dbdir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	require.NoError(t, err)
+	defer os.RemoveAll(dbdir)
+
 	ports, err := freeport.GetFreePorts(2)
 	require.NoError(t, err)
 	grpcPort := strconv.Itoa(ports[0])
@@ -52,8 +60,14 @@ func Test_basic_server_operation(t *testing.T) {
 				IsNewCluster: true,
 			}
 		},
+		func() sqlite.Params {
+			return sqlite.Params{
+				DBDir: dbdir,
+			}
+		},
 		New,
 		nd.New,
+		sqlite.New,
 		transport.NewPeerManager,
 		transport.NewTransportManager,
 		func() transport.ClientFactory {
