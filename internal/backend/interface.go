@@ -3,9 +3,21 @@ package backend
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/coreos/etcd/raft/raftpb"
 )
+
+// DBError is an error type that encapsulates an actual database error, in
+// contrast to a connection error. We need to distinguish those two types as we
+// process DB writes that are inherently incorrect and would always fail.
+type DBError struct {
+	Cause error
+}
+
+func (e *DBError) Error() string {
+	return fmt.Sprintf("DB error: %+v", e.Cause)
+}
 
 type PeerInfo struct {
 	NodeID uint64

@@ -12,7 +12,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
 	"github.com/golang/protobuf/proto"
-	_ "github.com/mattn/go-sqlite3"
+	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -300,13 +300,12 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 func (b *Backend) ExecSQL(ctx context.Context, term uint64, idx uint64, sql string) error {
 	_, err := b.db.ExecContext(ctx, sql)
 	if err != nil {
-		return errors.Wrapf(err, "executing sql: %s", sql)
+		if e, ok := err.(sqlite.Error); ok {
+			err = &backend.DBError{Cause: e}
+		}
+		return err
 	}
-	err = b.SaveApplied(ctx, term, idx)
-	if err != nil {
-		return errors.Wrap(err, "saving term and index")
-	}
-	return nil
+	return b.SaveApplied(ctx, term, idx)
 }
 
 func (b *Backend) QuerySQL(ctx context.Context, sql string) (*sql.Rows, error) {

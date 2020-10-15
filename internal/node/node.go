@@ -301,7 +301,15 @@ func (n *Node) processCommittedData(ctx context.Context, entry raftpb.Entry) err
 	}
 	err := n.backend.ExecSQL(ctx, entry.Term, entry.Index, query.Sql)
 	if err != nil {
-		n.logger.Errorf("error %+v executing committed command: %s", err, query.Sql)
+		// An inherent DB error should be treated as executed. Other
+		// errors, such as connection errors, mean failure to process.
+		if e, ok := err.(*backend.DBError); ok {
+			err = e.Cause
+			n.logger.Errorf("Actual database error %+v executing committed command: %s", err, query.Sql)
+		} else {
+			n.logger.Errorf("Execution error %+v executing committed command: %s", err, query.Sql)
+			return err
+		}
 	}
 	n.logger.Infof("Incoming data seen by node %d: %s", n.config.ID, query.Sql)
 	if query.NodeID == n.config.ID {
