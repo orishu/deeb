@@ -62,7 +62,8 @@ func Test_basic_server_operation(t *testing.T) {
 		},
 		func() sqlite.Params {
 			return sqlite.Params{
-				DBDir: dbdir,
+				DBDir:           dbdir,
+				EntriesToRetain: 5,
 			}
 		},
 		New,

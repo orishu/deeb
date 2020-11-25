@@ -145,6 +145,7 @@ func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) err
 		query := `INSERT INTO entries
 				(idx, term, type, data)
 				VALUES (?,?,?,?)`
+		// TODO: on insert conflict, delete all entries with idx >= i and redo the insert
 		res, err := b.raftdb.ExecContext(
 			ctx, query, entry.Index, entry.Term, entry.Type, entry.Data)
 		if err != nil {
@@ -294,6 +295,15 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		return errors.Wrap(err, "saving term and index from snapshot")
 	}
 
+	return nil
+}
+
+// Returns a snapshot "handle" that can later be released using RemoveSavedSnapshot
+func (b *Backend) SaveSnapshot(ctx context.Context, snap raftpb.Snapshot) (uint64, error) {
+	return 0, nil
+}
+
+func (b *Backend) RemoveSavedSnapshot(ctx context.Context, snapHandle uint64) error {
 	return nil
 }
 

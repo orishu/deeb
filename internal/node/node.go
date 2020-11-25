@@ -140,12 +140,10 @@ func (n *Node) runMainLoop(ctx context.Context) {
 		case <-ticker.C:
 			n.raftNode.Tick()
 		case rd := <-n.raftNode.Ready():
-			n.saveToStorage(ctx, rd.HardState, rd.Entries, rd.Snapshot)
+			n.saveToStorage(ctx, rd.HardState, rd.Entries)
+			snapHandle := n.saveSnapshotIfNotEmpty(ctx, rd.Snapshot)
 			n.sendMessages(ctx, rd.Messages)
-			if !raft.IsEmptySnap(rd.Snapshot) {
-				////        processSnapshot(rd.Snapshot)
-				n.logger.Info("got snapshot")
-			}
+			n.applySnapshotIfNotEmpty(ctx, rd.Snapshot, snapHandle)
 			for _, entry := range rd.CommittedEntries {
 				if entry.Type == raftpb.EntryNormal && len(entry.Data) > 0 {
 					n.processCommittedData(ctx, entry)
@@ -241,6 +239,13 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 			n.logger.Errorf("error sending message: %+v", err)
 			n.raftNode.ReportUnreachable(m.To)
 		}
+		if m.Type == raftpb.MsgSnap {
+			status := raft.SnapshotFinish
+			if err != nil {
+				status = raft.SnapshotFailure
+			}
+			n.raftNode.ReportSnapshot(m.To, status)
+		}
 	}
 }
 
@@ -252,14 +257,40 @@ func (n *Node) saveToStorage(
 	ctx context.Context,
 	hardState raftpb.HardState,
 	entries []raftpb.Entry,
-	snap raftpb.Snapshot,
 ) {
 	_ = n.backend.AppendEntries(ctx, entries)
 	if !raft.IsEmptyHardState(hardState) {
 		_ = n.backend.SaveHardState(ctx, &hardState)
 	}
-	if len(snap.Data) > 0 {
-		_ = n.backend.ApplySnapshot(ctx, snap)
+}
+
+func (n *Node) saveSnapshotIfNotEmpty(ctx context.Context, snap raftpb.Snapshot) uint64 {
+	if raft.IsEmptySnap(snap) {
+		return 0
+	}
+	snapHandle, err := n.backend.SaveSnapshot(ctx, snap)
+	if err != nil {
+		n.logger.Errorf("failed saving snapshot: %+v", err)
+		panic(err)
+	}
+	return snapHandle
+}
+
+func (n *Node) applySnapshotIfNotEmpty(ctx context.Context, snap raftpb.Snapshot, snapHandle uint64) {
+	if raft.IsEmptySnap(snap) {
+		return
+	}
+	n.logger.Info("got snapshot")
+	err := n.backend.ApplySnapshot(ctx, snap)
+	if err != nil {
+		n.logger.Errorf("failed applying snapshot: %+v", err)
+		panic(err)
+	}
+	if snapHandle != 0 {
+		err = n.backend.RemoveSavedSnapshot(ctx, snapHandle)
+		if err != nil {
+			n.logger.Errorf("failed removing saved snapshot: %+v", err)
+		}
 	}
 }
 

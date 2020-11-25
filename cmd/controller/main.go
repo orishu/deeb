@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/etcd-io/etcd/raft"
+	"github.com/orishu/deeb/internal/backend/sqlite"
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
@@ -28,6 +29,9 @@ func main() {
 	gatewayPort := flag.String("gwport", "11000", "The gRPC-Gateway server port")
 	nodeID := flag.Uint64("id", 1, "The node ID")
 	peerStr := flag.String("peers", "", "Comma-separated list of addr:port potential raft peers")
+	dbdir := flag.String("sqlitedir", "./db", "directory for the sqlite files")
+
+	_ = os.Mkdir(*dbdir, 0755)
 
 	flag.Parse()
 	peers := parsePeers(*peerStr)
@@ -48,10 +52,17 @@ func main() {
 				GatewayPort: *gatewayPort,
 			}
 		},
+		func() sqlite.Params {
+			return sqlite.Params{
+				DBDir:           *dbdir,
+				EntriesToRetain: 5,
+			}
+		},
 		nd.New,
 		server.New,
 		transport.NewPeerManager,
 		transport.NewTransportManager,
+		sqlite.New,
 		func() transport.ClientFactory { return transport.NewGRPCClient },
 		lib.NewDevelopmentLogger,
 		lib.NewLoggerAdapter,

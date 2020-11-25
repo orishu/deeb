@@ -33,6 +33,8 @@ type DBBackend interface {
 	GetAppliedIndex(ctx context.Context) (uint64, error)
 	SaveHardState(ctx context.Context, hardState *raftpb.HardState) error
 	SaveConfState(ctx context.Context, confState *raftpb.ConfState) error
+	SaveSnapshot(ctx context.Context, snap raftpb.Snapshot) (uint64, error)
+	RemoveSavedSnapshot(ctx context.Context, snapHandle uint64) error
 	ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	LoadPeers(ctx context.Context) ([]PeerInfo, error)
 	UpsertPeer(ctx context.Context, peerInfo PeerInfo) error
