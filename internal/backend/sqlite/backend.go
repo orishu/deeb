@@ -141,15 +141,28 @@ func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) err
 	if len(entries) == 0 {
 		return nil
 	}
+	tryInsert := func(entry raftpb.Entry) (sql.Result, error) {
+		query := `INSERT INTO entries (idx, term, type, data) VALUES (?,?,?,?)`
+		return b.raftdb.ExecContext(ctx, query, entry.Index, entry.Term, entry.Type, entry.Data)
+	}
 	for _, entry := range entries {
-		query := `INSERT INTO entries
-				(idx, term, type, data)
-				VALUES (?,?,?,?)`
-		// TODO: on insert conflict, delete all entries with idx >= i and redo the insert
-		res, err := b.raftdb.ExecContext(
-			ctx, query, entry.Index, entry.Term, entry.Type, entry.Data)
+		var res sql.Result
+		var err error
+		res, err = tryInsert(entry)
 		if err != nil {
-			return errors.Wrap(err, "appending raft entries")
+			if e, ok := err.(sqlite.Error); ok {
+				if e.Code == sqlite.ErrConstraint {
+					query := `DELETE FROM entries WHERE idx >= ?`
+					_, err2 := b.raftdb.ExecContext(ctx, query, entry.Index)
+					if err2 != nil {
+						return errors.Wrapf(err, "deleting conflicting entries as of %d", entry.Index)
+					}
+					res, err = tryInsert(entry)
+				}
+			}
+			if err != nil {
+				return errors.Wrap(err, "appending raft entries")
+			}
 		}
 		rows, err := res.RowsAffected()
 		if err != nil {

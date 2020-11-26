@@ -31,8 +31,15 @@ func Test_basic_sqlite_access(t *testing.T) {
 		{Index: 2, Term: 1, Type: raftpb.EntryNormal, Data: []byte("world")},
 		{Index: 3, Term: 2, Type: raftpb.EntryNormal, Data: []byte("hi")},
 		{Index: 4, Term: 2, Type: raftpb.EntryNormal, Data: []byte("there")},
+		{Index: 5, Term: 2, Type: raftpb.EntryNormal, Data: []byte("fifth")},
 	})
 	require.NoError(t, err)
+
+	err = b.AppendEntries(ctx, []raftpb.Entry{
+		{Index: 4, Term: 2, Type: raftpb.EntryNormal, Data: []byte("there2")},
+	})
+	_, err = st.Entries(5, 5, 1)
+	require.Error(t, err)
 
 	err = b.SaveHardState(ctx, &raftpb.HardState{Term: 1, Vote: 12, Commit: 100})
 	require.NoError(t, err)
