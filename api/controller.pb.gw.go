@@ -84,6 +84,34 @@ func local_request_ControlService_AddPeer_0(ctx context.Context, marshaler runti
 
 }
 
+var (
+	filter_ControlService_QuerySQL_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
+
+func request_ControlService_QuerySQL_0(ctx context.Context, marshaler runtime.Marshaler, client ControlServiceClient, req *http.Request, pathParams map[string]string) (ControlService_QuerySQLClient, runtime.ServerMetadata, error) {
+	var protoReq QuerySQLRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_ControlService_QuerySQL_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	stream, err := client.QuerySQL(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+
+}
+
 func request_Raft_GetID_0(ctx context.Context, marshaler runtime.Marshaler, client RaftClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq types.Empty
 	var metadata runtime.ServerMetadata
@@ -146,6 +174,13 @@ func RegisterControlServiceHandlerServer(ctx context.Context, mux *runtime.Serve
 
 		forward_ControlService_AddPeer_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
+	})
+
+	mux.Handle("GET", pattern_ControlService_QuerySQL_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 
 	return nil
@@ -258,6 +293,26 @@ func RegisterControlServiceHandlerClient(ctx context.Context, mux *runtime.Serve
 
 	})
 
+	mux.Handle("GET", pattern_ControlService_QuerySQL_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_ControlService_QuerySQL_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_ControlService_QuerySQL_0(ctx, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -265,12 +320,16 @@ var (
 	pattern_ControlService_Status_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"api", "v1", "status"}, "", runtime.AssumeColonVerbOpt(true)))
 
 	pattern_ControlService_AddPeer_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"api", "v1", "peers"}, "", runtime.AssumeColonVerbOpt(true)))
+
+	pattern_ControlService_QuerySQL_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"api", "v1", "querysql"}, "", runtime.AssumeColonVerbOpt(true)))
 )
 
 var (
 	forward_ControlService_Status_0 = runtime.ForwardResponseMessage
 
 	forward_ControlService_AddPeer_0 = runtime.ForwardResponseMessage
+
+	forward_ControlService_QuerySQL_0 = runtime.ForwardResponseStream
 )
 
 // RegisterRaftHandlerFromEndpoint is same as RegisterRaftHandler but

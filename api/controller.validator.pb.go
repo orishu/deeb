@@ -8,12 +8,13 @@ import (
 	math "math"
 	proto "github.com/gogo/protobuf/proto"
 	golang_proto "github.com/golang/protobuf/proto"
-	_ "github.com/gogo/googleapis/google/api"
-	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger/options"
 	_ "github.com/gogo/protobuf/gogoproto"
 	_ "github.com/mwitkow/go-proto-validators"
 	_ "github.com/coreos/etcd/raft/raftpb"
 	_ "github.com/gogo/protobuf/types"
+	_ "github.com/gogo/googleapis/google/api"
+	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger/options"
+	github_com_mwitkow_go_proto_validators "github.com/mwitkow/go-proto-validators"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -32,5 +33,38 @@ func (this *GetIDResponse) Validate() error {
 	return nil
 }
 func (this *WriteQuery) Validate() error {
+	return nil
+}
+func (this *Row) Validate() error {
+	for _, item := range this.Cells {
+		if item != nil {
+			if err := github_com_mwitkow_go_proto_validators.CallValidatorIfExists(item); err != nil {
+				return github_com_mwitkow_go_proto_validators.FieldError("Cells", err)
+			}
+		}
+	}
+	return nil
+}
+func (this *Row_Cell) Validate() error {
+	if oneOfNester, ok := this.GetValue().(*Row_Cell_Ts); ok {
+		if oneOfNester.Ts != nil {
+			if err := github_com_mwitkow_go_proto_validators.CallValidatorIfExists(oneOfNester.Ts); err != nil {
+				return github_com_mwitkow_go_proto_validators.FieldError("Ts", err)
+			}
+		}
+	}
+	return nil
+}
+func (this *QuerySQLRequest) Validate() error {
+	return nil
+}
+func (this *QuerySQLResponse) Validate() error {
+	for _, item := range this.Rows {
+		if item != nil {
+			if err := github_com_mwitkow_go_proto_validators.CallValidatorIfExists(item); err != nil {
+				return github_com_mwitkow_go_proto_validators.FieldError("Rows", err)
+			}
+		}
+	}
 	return nil
 }

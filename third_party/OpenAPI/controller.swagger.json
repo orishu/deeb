@@ -46,6 +46,45 @@
         ]
       }
     },
+    "/api/v1/querysql": {
+      "get": {
+        "operationId": "ControlService_QuerySQL",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/apiQuerySQLResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/runtimeStreamError"
+                }
+              },
+              "title": "Stream result of apiQuerySQLResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sql",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ControlService"
+        ]
+      }
+    },
     "/api/v1/raft/id": {
       "get": {
         "operationId": "Raft_GetID",
@@ -92,6 +131,38 @@
     }
   },
   "definitions": {
+    "RowCell": {
+      "type": "object",
+      "properties": {
+        "str": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string",
+          "format": "byte"
+        },
+        "i64": {
+          "type": "string",
+          "format": "int64"
+        },
+        "i32": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "f64": {
+          "type": "number",
+          "format": "double"
+        },
+        "b": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
     "apiAddPeerRequest": {
       "type": "object",
       "properties": {
@@ -113,6 +184,28 @@
         "id": {
           "type": "string",
           "format": "uint64"
+        }
+      }
+    },
+    "apiQuerySQLResponse": {
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/apiRow"
+          }
+        }
+      }
+    },
+    "apiRow": {
+      "type": "object",
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RowCell"
+          }
         }
       }
     },
@@ -258,6 +351,31 @@
           "format": "int32"
         },
         "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "runtimeStreamError": {
+      "type": "object",
+      "properties": {
+        "grpc_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "http_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "http_status": {
           "type": "string"
         },
         "details": {

@@ -45,6 +45,12 @@ service ControlService {
 			body: "*"
 		};
 	}
+
+	rpc QuerySQL(QuerySQLRequest) returns (stream QuerySQLResponse) {
+		option (google.api.http) = {
+			get: "/api/v1/querysql"
+		};
+	};
 }
 
 service Raft {
@@ -80,3 +86,26 @@ message WriteQuery {
 	uint64 queryID = 2;
 	string sql = 3;
 }
+
+message Row {
+	message Cell {
+		oneof value {
+			string str = 1;
+			bytes by = 2;
+			int64 i64 = 3;
+			int32 i32 = 4;
+			double f64 = 5;
+			bool b = 6;
+			google.protobuf.Timestamp ts = 7;
+		}
+	}
+	repeated Cell cells = 1;
+};
+
+message QuerySQLRequest {
+	string sql = 1;
+};
+
+message QuerySQLResponse {
+	repeated Row rows = 1;
+};

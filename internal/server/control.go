@@ -21,3 +21,7 @@ func (c controlService) AddPeer(ctx context.Context, req *pb.AddPeerRequest) (*t
 	err := c.node.AddNode(ctx, req.Id, nd.NodeInfo{Addr: req.Addr, Port: req.Port})
 	return &types.Empty{}, err
 }
+
+func (c controlService) QuerySQL(*pb.QuerySQLRequest, pb.ControlService_QuerySQLServer) error {
+	return nil
+}
