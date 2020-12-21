@@ -190,11 +190,8 @@
     "apiQuerySQLResponse": {
       "type": "object",
       "properties": {
-        "rows": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/apiRow"
-          }
+        "row": {
+          "$ref": "#/definitions/apiRow"
         }
       }
     },

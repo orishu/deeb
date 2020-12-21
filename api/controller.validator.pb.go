@@ -59,11 +59,9 @@ func (this *QuerySQLRequest) Validate() error {
 	return nil
 }
 func (this *QuerySQLResponse) Validate() error {
-	for _, item := range this.Rows {
-		if item != nil {
-			if err := github_com_mwitkow_go_proto_validators.CallValidatorIfExists(item); err != nil {
-				return github_com_mwitkow_go_proto_validators.FieldError("Rows", err)
-			}
+	if this.Row != nil {
+		if err := github_com_mwitkow_go_proto_validators.CallValidatorIfExists(this.Row); err != nil {
+			return github_com_mwitkow_go_proto_validators.FieldError("Row", err)
 		}
 	}
 	return nil

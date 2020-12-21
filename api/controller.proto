@@ -107,5 +107,5 @@ message QuerySQLRequest {
 };
 
 message QuerySQLResponse {
-	repeated Row rows = 1;
+	Row row = 1;
 };
