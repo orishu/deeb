@@ -51,6 +51,13 @@ service ControlService {
 			get: "/api/v1/querysql"
 		};
 	};
+
+	rpc ExecuteSQL(ExecuteSQLRequest) returns (google.protobuf.Empty) {
+		option (google.api.http) = {
+			post: "/api/v1/executesql"
+			body: "*"
+		};
+	}
 }
 
 service Raft {
@@ -108,4 +115,8 @@ message QuerySQLRequest {
 
 message QuerySQLResponse {
 	Row row = 1;
+};
+
+message ExecuteSQLRequest {
+	string sql = 1;
 };

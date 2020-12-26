@@ -100,7 +100,7 @@ func (n *Node) Start(ctx context.Context) error {
 	n.raftNode = raft.StartNode(&n.config, peers)
 	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
-	go func() { n.runMainLoop(ctx) }()
+	go func() { n.runMainLoop(context.Background()) }()
 	return nil
 }
 

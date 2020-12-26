@@ -25,6 +25,11 @@ func (c controlService) AddPeer(ctx context.Context, req *pb.AddPeerRequest) (*t
 	return &types.Empty{}, err
 }
 
+func (c controlService) ExecuteSQL(ctx context.Context, req *pb.ExecuteSQLRequest) (*types.Empty, error) {
+	err := c.node.WriteQuery(ctx, req.Sql)
+	return &types.Empty{}, err
+}
+
 func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_QuerySQLServer) error {
 	rows, err := c.node.ReadQuery(srv.Context(), req.Sql)
 	if err != nil {
@@ -37,8 +42,20 @@ func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_
 	for rows.Next() {
 		values := make([]interface{}, 0, len(columnTypes))
 		for _, ct := range columnTypes {
-			zeroVal := reflect.Zero(ct.ScanType())
-			values = append(values, &zeroVal)
+			scanType := ct.ScanType()
+			if scanType == reflect.TypeOf(nil) {
+				switch ct.DatabaseTypeName() {
+				case "INTEGER", "INT":
+					scanType = reflect.TypeOf(int(1))
+				case "REAL":
+					scanType = reflect.TypeOf(float64(0))
+				case "TEXT":
+					scanType = reflect.TypeOf("")
+				case "BLOB":
+					scanType = reflect.TypeOf([]byte{})
+				}
+			}
+			values = append(values, reflect.New(scanType).Interface())
 		}
 		err := rows.Scan(values...)
 		if err != nil {
@@ -51,6 +68,10 @@ func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_
 				cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_Str{Str: *v}})
 			case *[]byte:
 				cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_By{By: *v}})
+			case *int:
+				cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_I64{I64: int64(*v)}})
+			case *uint:
+				cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_I64{I64: int64(*v)}})
 			case *uint64:
 				cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_I64{I64: int64(*v)}})
 			case *int64:
