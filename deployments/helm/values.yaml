@@ -11,7 +11,7 @@ sidecarImage: "sidecar"
 sidecarImageTag: "latest"
 sidecarSecretName: my-ssh-key
 
-replicas: 2
+replicas: 1
 
 ## Specify password for root user
 ##

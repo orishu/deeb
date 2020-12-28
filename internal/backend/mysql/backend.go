@@ -14,9 +14,8 @@ import (
 )
 
 type Params struct {
+	MysqlPort       int
 	Namespace       string
-	StatefulSetName string
-	StatefulSetSize int
 	ReplicaIndex    int
 	EntriesToRetain uint64
 }
@@ -24,12 +23,11 @@ type Params struct {
 func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
 	b := &Backend{
 		namespace:       params.Namespace,
-		statefulSetName: params.StatefulSetName,
-		statefulSetSize: params.StatefulSetSize,
 		replicaIndex:    params.ReplicaIndex,
 		mgmtDBName:      "mgmt",
 		raftDBName:      "raft",
 		entriesToRetain: params.EntriesToRetain,
+		mysqlPort:       params.MysqlPort,
 		logger:          logger,
 	}
 	return b, b
@@ -38,12 +36,11 @@ func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Stor
 // Backend is the mysql backend
 type Backend struct {
 	namespace       string
-	statefulSetName string
-	statefulSetSize int
 	replicaIndex    int
 	mgmtDBName      string
 	raftDBName      string
 	entriesToRetain uint64
+	mysqlPort       int
 	mgmtdb          *sql.DB
 	raftdb          *sql.DB
 	logger          *zap.SugaredLogger
