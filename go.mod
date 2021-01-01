@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/coreos/etcd v3.3.24+incompatible
 	github.com/etcd-io/etcd v3.3.24+incompatible
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/googleapis v1.4.0
 	github.com/gogo/protobuf v1.3.1
@@ -24,7 +25,6 @@ require (
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
 	golang.org/x/tools v0.0.0-20200904185747-39188db58858 // indirect
 	google.golang.org/grpc v1.31.1
-	gopkg.in/yaml.v2 v2.3.0 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
 	k8s.io/api v0.20.1
 	k8s.io/apimachinery v0.20.1

@@ -238,12 +238,7 @@ func Test_basic_mysql_access(t *testing.T) {
 		fmt.Println("Finished sleeping.")
 	*/
 
-	b, _ := New(Params{
-		Namespace:       namespace,
-		ReplicaIndex:    0,
-		EntriesToRetain: 5,
-		MysqlPort:       mysqlPort,
-	}, lib.NewDevelopmentLogger())
+	b, _ := New(Params{EntriesToRetain: 5, MysqlPort: mysqlPort}, lib.NewDevelopmentLogger())
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
 	require.NoError(t, err)

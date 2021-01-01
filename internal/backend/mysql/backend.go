@@ -7,6 +7,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang/protobuf/proto"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/pkg/errors"
@@ -15,15 +16,11 @@ import (
 
 type Params struct {
 	MysqlPort       int
-	Namespace       string
-	ReplicaIndex    int
 	EntriesToRetain uint64
 }
 
 func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
 	b := &Backend{
-		namespace:       params.Namespace,
-		replicaIndex:    params.ReplicaIndex,
 		mgmtDBName:      "mgmt",
 		raftDBName:      "raft",
 		entriesToRetain: params.EntriesToRetain,
@@ -35,12 +32,11 @@ func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Stor
 
 // Backend is the mysql backend
 type Backend struct {
-	namespace       string
-	replicaIndex    int
 	mgmtDBName      string
 	raftDBName      string
 	entriesToRetain uint64
 	mysqlPort       int
+	maindb          *sql.DB
 	mgmtdb          *sql.DB
 	raftdb          *sql.DB
 	logger          *zap.SugaredLogger
@@ -53,18 +49,52 @@ func (b *Backend) Start(ctx context.Context) error {
 }
 
 func (b *Backend) innerStart(ctx context.Context, create bool) error {
+	connStr := fmt.Sprintf("root@tcp(127.0.0.1:%d)/", b.mysqlPort)
+	db, err := sql.Open("mysql", connStr)
+	if err != nil {
+		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
+	}
+	b.maindb = db
+	if create {
+		return b.createTables(ctx)
+	}
 	return nil
 }
 
 func (b *Backend) createTables(ctx context.Context) error {
-	query := `CREATE TABLE IF NOT EXISTS state (
-			idx INTEGER NOT NULL,
-			term INTEGER NOT NULL,
-			hardstate_term INTEGER NOT NULL,
-			hardstate_vote INTEGER NOT NULL,
-			hardstate_commit INTEGER NOT NULL,
+	query := `CREATE DATABASE IF NOT EXISTS raft`
+	_, err := b.maindb.ExecContext(ctx, query)
+	if err != nil {
+		return errors.Wrap(err, "creating raft database")
+	}
+	query = `CREATE DATABASE IF NOT EXISTS mgmt`
+	_, err = b.maindb.ExecContext(ctx, query)
+	if err != nil {
+		return errors.Wrap(err, "creating mgmt database")
+	}
+	connStrPrefix := fmt.Sprintf("root@tcp(127.0.0.1:%d)/", b.mysqlPort)
+	connStr := connStrPrefix + "raft"
+	db, err := sql.Open("mysql", connStr)
+	if err != nil {
+		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
+	}
+	b.raftdb = db
+	connStr = connStrPrefix + "mgmt"
+	db, err = sql.Open("mysql", connStr)
+	if err != nil {
+		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
+	}
+	b.mgmtdb = db
+
+	query = `CREATE TABLE IF NOT EXISTS state (
+			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+			idx INT NOT NULL,
+			term INT NOT NULL,
+			hardstate_term INT NOT NULL,
+			hardstate_vote INT NOT NULL,
+			hardstate_commit INT NOT NULL,
 			confstate BLOB)`
-	_, err := b.raftdb.ExecContext(ctx, query)
+	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating state table")
 	}
@@ -75,8 +105,8 @@ func (b *Backend) createTables(ctx context.Context) error {
 	}
 	if count == 0 {
 		query = `INSERT INTO state
-			(rowid, idx, term, hardstate_term, hardstate_vote, hardstate_commit)
-			VALUES (1, 0, 0, 0, 0, 0)`
+			(idx, term, hardstate_term, hardstate_vote, hardstate_commit)
+			VALUES (0, 0, 0, 0, 0)`
 		_, err = b.raftdb.ExecContext(ctx, query)
 		if err != nil {
 			return errors.Wrap(err, "creating first row of state table")
@@ -84,7 +114,7 @@ func (b *Backend) createTables(ctx context.Context) error {
 	}
 
 	query = `CREATE TABLE IF NOT EXISTS peers (
-			nodeid INTEGER PRIMARY KEY,
+			nodeid INT PRIMARY KEY,
 			address TEXT NOT NULL,
 			port TEXT NOT NULL)`
 	_, err = b.mgmtdb.ExecContext(ctx, query)
@@ -93,10 +123,10 @@ func (b *Backend) createTables(ctx context.Context) error {
 	}
 
 	query = `CREATE TABLE IF NOT EXISTS entries (
-			idx INTEGER PRIMARY KEY,
-			term INTEGER NOT NULL,
-			type INTEGER NOT NULL,
-			data BLOB) WITHOUT ROWID`
+			idx INT PRIMARY KEY,
+			term INT NOT NULL,
+			type INT NOT NULL,
+			data BLOB)`
 	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating entries table")
@@ -106,6 +136,9 @@ func (b *Backend) createTables(ctx context.Context) error {
 }
 
 func (b *Backend) Stop(ctx context.Context) {
+	if b.maindb != nil {
+		b.maindb.Close()
+	}
 	if b.raftdb != nil {
 		b.raftdb.Close()
 	}
@@ -169,7 +202,7 @@ func (b *Backend) SaveHardState(ctx context.Context, hardState *raftpb.HardState
 			hardstate_term = ?,
 			hardstate_vote = ?,
 			hardstate_commit = ?
-			WHERE rowid = 1`
+			WHERE id = 1`
 	_, err := b.raftdb.ExecContext(
 		ctx, query, hardState.Term, hardState.Vote, hardState.Commit)
 	if err != nil {
@@ -179,7 +212,7 @@ func (b *Backend) SaveHardState(ctx context.Context, hardState *raftpb.HardState
 }
 
 func (b *Backend) SaveApplied(ctx context.Context, Term uint64, Index uint64) error {
-	query := `UPDATE state SET term = ?, idx = ? WHERE rowid = 1`
+	query := `UPDATE state SET term = ?, idx = ? WHERE id = 1`
 	_, err := b.raftdb.ExecContext(ctx, query, Term, Index)
 	if err != nil {
 		return errors.Wrap(err, "saving applied state")
@@ -188,7 +221,7 @@ func (b *Backend) SaveApplied(ctx context.Context, Term uint64, Index uint64) er
 }
 
 func (b *Backend) GetAppliedIndex(ctx context.Context) (uint64, error) {
-	query := `SELECT idx FROM state WHERE rowid = 1`
+	query := `SELECT idx FROM state WHERE id = 1`
 	idx, err := queryInteger(ctx, b.raftdb, query)
 	if err != nil {
 		return 0, errors.Wrap(err, "getting applied index")
@@ -197,7 +230,7 @@ func (b *Backend) GetAppliedIndex(ctx context.Context) (uint64, error) {
 }
 
 func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState) error {
-	query := `UPDATE state SET confstate = ? WHERE rowid = 1`
+	query := `UPDATE state SET confstate = ? WHERE id = 1`
 	d, err := proto.Marshal(confState)
 	if err != nil {
 		return errors.Wrap(err, "marshalling conf state")
