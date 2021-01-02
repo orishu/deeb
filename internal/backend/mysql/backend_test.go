@@ -2,26 +2,11 @@ package mysql
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 )
 
 var configMapSpec string = `
@@ -185,50 +170,25 @@ spec:
 
 func Test_basic_mysql_access(t *testing.T) {
 	ctx := context.Background()
-	kubeCfgPath := filepath.Join(homedir.HomeDir(), ".kube", "config")
-	kubeCfg, err := clientcmd.BuildConfigFromFlags("", kubeCfgPath)
+
+	logger := lib.NewDevelopmentLogger()
+	kubeHelper, err := lib.NewKubeHelper("test", logger)
 	require.NoError(t, err)
 
-	kube, err := kubernetes.NewForConfig(kubeCfg)
+	err = kubeHelper.EnsureConfigMap(ctx, "t1-deeb-configuration", configMapSpec)
+	require.NoError(t, err)
+	err = kubeHelper.EnsureStatefulSet(ctx, "t1-deeb", statefulSetSpec)
 	require.NoError(t, err)
 
-	namespace := "test"
-
-	cmapName := "t1-deeb-configuration"
-	cmaps := kube.CoreV1().ConfigMaps(namespace)
-	cmap, err := cmaps.Get(ctx, cmapName, metav1.GetOptions{})
-	if k8serrors.IsNotFound(err) {
-		var newCmap corev1.ConfigMap
-		err := yaml.Unmarshal([]byte(configMapSpec), &newCmap)
-		require.NoError(t, err)
-		fmt.Printf("creating the ConfigMap\n")
-		cmap, err = cmaps.Create(ctx, &newCmap, metav1.CreateOptions{})
-		require.NoError(t, err)
-		fmt.Printf("cmap: %#v\n", cmap)
-	}
-
-	ssetName := "t1-deeb"
-	ssets := kube.AppsV1().StatefulSets(namespace)
-	sset, err := ssets.Get(ctx, ssetName, metav1.GetOptions{})
-	if k8serrors.IsNotFound(err) {
-		var newSset appsv1.StatefulSet
-		err := yaml.Unmarshal([]byte(statefulSetSpec), &newSset)
-		require.NoError(t, err)
-		fmt.Printf("creating the StatefulSet\n")
-		sset, err = ssets.Create(ctx, &newSset, metav1.CreateOptions{})
-		require.NoError(t, err)
-		fmt.Printf("sset: %#v\n", sset)
-	}
-
-	// Wait for pod to be ready
 	podName := "t1-deeb-0"
-	waitForPodToBeReady(t, ctx, kube, namespace, podName, 30)
+	err = kubeHelper.WaitForPodToBeReady(ctx, podName, 30)
+	require.NoError(t, err)
 
 	ports, err := freeport.GetFreePorts(1)
 	require.NoError(t, err)
 	mysqlPort := ports[0]
 
-	portForwardCloser, err := portForward(kubeCfg, namespace, podName, mysqlPort, 3306)
+	portForwardCloser, err := kubeHelper.PortForward(podName, mysqlPort, 3306)
 	require.NoError(t, err)
 	defer portForwardCloser()
 
@@ -238,7 +198,7 @@ func Test_basic_mysql_access(t *testing.T) {
 		fmt.Println("Finished sleeping.")
 	*/
 
-	b, _ := New(Params{EntriesToRetain: 5, MysqlPort: mysqlPort}, lib.NewDevelopmentLogger())
+	b, _ := New(Params{EntriesToRetain: 5, MysqlPort: mysqlPort}, logger)
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
 	require.NoError(t, err)
@@ -392,80 +352,4 @@ func Test_basic_mysql_access(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(7), maxIdx)
 	*/
-}
-
-func portForward(
-	kubeCfg *rest.Config,
-	namespace string,
-	podName string,
-	localPort int,
-	podPort int,
-) (func(), error) {
-	stopCh := make(chan struct{}, 1)
-	readyCh := make(chan struct{})
-	errCh := make(chan error)
-	stream := genericclioptions.IOStreams{
-		In:     os.Stdin,
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-	}
-
-	go func() {
-		err := PortForwardAPod(PortForwardAPodRequest{
-			RestConfig: kubeCfg,
-			Pod: v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName,
-					Namespace: namespace,
-				},
-			},
-			LocalPort: localPort,
-			PodPort:   podPort,
-			Streams:   stream,
-			StopCh:    stopCh,
-			ReadyCh:   readyCh,
-		})
-		if err != nil {
-			errCh <- err
-		}
-	}()
-
-	select {
-	case <-readyCh:
-		break
-	case err := <-errCh:
-		return func() {}, err
-	}
-
-	return func() { close(stopCh) }, nil
-}
-
-func waitForPodToBeReady(
-	t *testing.T,
-	ctx context.Context,
-	kube *kubernetes.Clientset,
-	namespace string,
-	podName string,
-	attempts int,
-) {
-	pods := kube.CoreV1().Pods(namespace)
-	for attempts > 0 {
-		pod, err := pods.Get(ctx, podName, metav1.GetOptions{})
-		if err == nil && pod.Status.Phase == "Running" {
-			ready := false
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == "Ready" && cond.Status == "True" {
-					ready = true
-					break
-				}
-			}
-			if ready {
-				break
-			}
-		}
-		require.True(t, err == nil || k8serrors.IsNotFound(err))
-		fmt.Printf("Waiting for pod to be ready\n")
-		time.Sleep(time.Second)
-		attempts -= 1
-	}
 }
