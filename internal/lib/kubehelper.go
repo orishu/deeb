@@ -67,6 +67,24 @@ func (k *KubeHelper) EnsureConfigMap(ctx context.Context, cmapName string, cmapY
 	return nil
 }
 
+func (k *KubeHelper) EnsureSecret(ctx context.Context, secretName string, secretYAML string) error {
+	secrets := k.kube.CoreV1().Secrets(k.namespace)
+	secret, err := secrets.Get(ctx, secretName, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		var newSecret corev1.Secret
+		err := yaml.Unmarshal([]byte(secretYAML), &newSecret)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling Secret YAML")
+		}
+		secret, err = secrets.Create(ctx, &newSecret, metav1.CreateOptions{})
+		if err != nil {
+			return errors.Wrap(err, "creating Secret")
+		}
+	}
+	_ = secret
+	return nil
+}
+
 func (k *KubeHelper) EnsurePod(ctx context.Context, podName string, podYAML string) error {
 	pods := k.kube.CoreV1().Pods(k.namespace)
 	pod, err := pods.Get(ctx, podName, metav1.GetOptions{})

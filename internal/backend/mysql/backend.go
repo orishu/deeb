@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
 	_ "github.com/go-sql-driver/mysql"
+	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/golang/protobuf/proto"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/pkg/errors"
@@ -160,20 +161,16 @@ func (b *Backend) AppendEntries(ctx context.Context, entries []raftpb.Entry) err
 		var err error
 		res, err = tryInsert(entry)
 		if err != nil {
-			/*
-				TODO: handle conflicting raft entries
-
-				if e, ok := err.(sqlite.Error); ok {
-					if e.Code == sqlite.ErrConstraint {
-						query := `DELETE FROM entries WHERE idx >= ?`
-						_, err2 := b.raftdb.ExecContext(ctx, query, entry.Index)
-						if err2 != nil {
-							return errors.Wrapf(err, "deleting conflicting entries as of %d", entry.Index)
-						}
-						res, err = tryInsert(entry)
+			if e, ok := err.(*mysqldrv.MySQLError); ok {
+				if e.Number == 1062 { // Duplicate index
+					query := `DELETE FROM entries WHERE idx >= ?`
+					_, err2 := b.raftdb.ExecContext(ctx, query, entry.Index)
+					if err2 != nil {
+						return errors.Wrapf(err, "deleting conflicting entries as of %d", entry.Index)
 					}
+					res, err = tryInsert(entry)
 				}
-			*/
+			}
 			if err != nil {
 				return errors.Wrap(err, "appending raft entries")
 			}

@@ -4,169 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 )
-
-var configMapSpec string = `
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: t1-deeb-configuration
-  namespace: test
-data:
-  repl.cnf: |-
-    [mysqld]
-    gtid_mode=ON
-    enforce_gtid_consistency=ON
-`
-
-var statefulSetSpec string = `
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  annotations:
-    unit-testing: test_name
-  labels:
-    app.kubernetes.io/instance: t1
-    app.kubernetes.io/name: deeb
-  name: t1-deeb
-  namespace: test
-spec:
-  podManagementPolicy: OrderedReady
-  replicas: 1
-  revisionHistoryLimit: 3
-  selector:
-    matchLabels:
-      app.kubernetes.io/instance: t1
-      app.kubernetes.io/name: deeb
-  serviceName: t1-deeb
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/instance: t1
-        app.kubernetes.io/name: deeb
-    spec:
-      containers:
-      - env:
-        - name: MYSQL_ALLOW_EMPTY_PASSWORD
-          value: "true"
-        - name: MYSQL_USER
-        - name: MYSQL_DATABASE
-          value: testdb
-        image: percona:ps-8.0
-        imagePullPolicy: IfNotPresent
-        livenessProbe:
-          exec:
-            command:
-            - mysqladmin
-            - ping
-          failureThreshold: 3
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 5
-        name: t1-deeb
-        ports:
-        - containerPort: 3306
-          name: mysql
-          protocol: TCP
-        readinessProbe:
-          exec:
-            command:
-            - mysqladmin
-            - ping
-          failureThreshold: 3
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 1
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /var/lib/mysql
-          name: data
-        - mountPath: /etc/my.cnf.d/repl.cnf
-          name: configurations
-          subPath: repl.cnf
-      - image: sidecar:latest
-        imagePullPolicy: IfNotPresent
-        name: t1-deeb-sidecar
-        ports:
-        - containerPort: 22
-          name: ssh
-          protocol: TCP
-        resources:
-          requests:
-            cpu: 50m
-            memory: 128Mi
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /var/lib/mysql
-          name: data
-        - mountPath: /var/secrets
-          name: ssh-keys
-      dnsPolicy: ClusterFirst
-      initContainers:
-      - command:
-        - rm
-        - -fr
-        - /var/lib/mysql/lost+found
-        image: busybox:1.25.0
-        imagePullPolicy: IfNotPresent
-        name: remove-lost-found
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /var/lib/mysql
-          name: data
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      terminationGracePeriodSeconds: 30
-      volumes:
-      - configMap:
-          defaultMode: 420
-          name: t1-deeb-configuration
-        name: configurations
-      - name: ssh-keys
-        secret:
-          defaultMode: 420
-          items:
-          - key: id_rsa
-            mode: 256
-            path: id_rsa
-          - key: id_rsa.pub
-            path: id_rsa.pub
-          secretName: my-ssh-key
-  updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
-  volumeClaimTemplates:
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      creationTimestamp: null
-      labels:
-        app.kubernetes.io/instance: t1
-        app.kubernetes.io/name: deeb
-      name: data
-    spec:
-      accessModes:
-      - ReadWriteOnce
-      resources:
-        requests:
-          storage: 100Mi
-      volumeMode: Filesystem
-`
 
 func Test_basic_mysql_access(t *testing.T) {
 	ctx := context.Background()
@@ -175,6 +18,8 @@ func Test_basic_mysql_access(t *testing.T) {
 	kubeHelper, err := lib.NewKubeHelper("test", logger)
 	require.NoError(t, err)
 
+	err = kubeHelper.EnsureSecret(ctx, "my-ssh-key", sshSecretSpec)
+	require.NoError(t, err)
 	err = kubeHelper.EnsureConfigMap(ctx, "t1-deeb-configuration", configMapSpec)
 	require.NoError(t, err)
 	err = kubeHelper.EnsureStatefulSet(ctx, "t1-deeb", statefulSetSpec)
@@ -192,93 +37,77 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.NoError(t, err)
 	defer portForwardCloser()
 
-	/*
-		fmt.Println("Sleeping...")
-		time.Sleep(5 * time.Minute)
-		fmt.Println("Finished sleeping.")
-	*/
-
-	b, _ := New(Params{EntriesToRetain: 5, MysqlPort: mysqlPort}, logger)
+	b, st := New(Params{EntriesToRetain: 5, MysqlPort: mysqlPort}, logger)
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
 	require.NoError(t, err)
 
-	/*
-		dir, err := ioutil.TempDir("./testdb", fmt.Sprintf("%s-*", t.Name()))
-		defer os.RemoveAll(dir)
+	err = b.AppendEntries(ctx, []raftpb.Entry{
+		{Index: 1, Term: 1, Type: raftpb.EntryNormal, Data: []byte("hello")},
+		{Index: 2, Term: 1, Type: raftpb.EntryNormal, Data: []byte("world")},
+		{Index: 3, Term: 2, Type: raftpb.EntryNormal, Data: []byte("hi")},
+		{Index: 4, Term: 2, Type: raftpb.EntryNormal, Data: []byte("there")},
+		{Index: 5, Term: 2, Type: raftpb.EntryNormal, Data: []byte("fifth")},
+	})
+	require.NoError(t, err)
 
-		require.NoError(t, err)
-		b, st := New(Params{DBDir: dir, EntriesToRetain: 5}, lib.NewDevelopmentLogger())
-		ctx := context.Background()
-		err = b.Start(ctx)
-		defer b.Stop(ctx)
-		require.NoError(t, err)
+	err = b.AppendEntries(ctx, []raftpb.Entry{
+		{Index: 4, Term: 2, Type: raftpb.EntryNormal, Data: []byte("there2")},
+	})
+	_, err = st.Entries(5, 5, 1)
+	require.Error(t, err)
 
-		err = b.AppendEntries(ctx, []raftpb.Entry{
-			{Index: 1, Term: 1, Type: raftpb.EntryNormal, Data: []byte("hello")},
+	err = b.SaveHardState(ctx, &raftpb.HardState{Term: 1, Vote: 12, Commit: 100})
+	require.NoError(t, err)
+	err = b.SaveHardState(ctx, &raftpb.HardState{Term: 2, Vote: 12, Commit: 101})
+	require.NoError(t, err)
+
+	term, err := st.Term(2)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), term)
+
+	entries, err := st.Entries(2, 4, 10)
+	require.NoError(t, err)
+	require.Equal(t,
+		[]raftpb.Entry{
 			{Index: 2, Term: 1, Type: raftpb.EntryNormal, Data: []byte("world")},
 			{Index: 3, Term: 2, Type: raftpb.EntryNormal, Data: []byte("hi")},
-			{Index: 4, Term: 2, Type: raftpb.EntryNormal, Data: []byte("there")},
-			{Index: 5, Term: 2, Type: raftpb.EntryNormal, Data: []byte("fifth")},
-		})
-		require.NoError(t, err)
+		},
+		entries,
+	)
 
-		err = b.AppendEntries(ctx, []raftpb.Entry{
-			{Index: 4, Term: 2, Type: raftpb.EntryNormal, Data: []byte("there2")},
-		})
-		_, err = st.Entries(5, 5, 1)
-		require.Error(t, err)
+	minIdx, err := st.FirstIndex()
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), minIdx)
+	maxIdx, err := st.LastIndex()
+	require.NoError(t, err)
+	require.Equal(t, uint64(4), maxIdx)
 
-		err = b.SaveHardState(ctx, &raftpb.HardState{Term: 1, Vote: 12, Commit: 100})
-		require.NoError(t, err)
-		err = b.SaveHardState(ctx, &raftpb.HardState{Term: 2, Vote: 12, Commit: 101})
-		require.NoError(t, err)
+	err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}})
+	require.NoError(t, err)
 
-		term, err := st.Term(2)
-		require.NoError(t, err)
-		require.Equal(t, uint64(1), term)
+	err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"})
+	require.NoError(t, err)
+	err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"})
+	require.NoError(t, err)
+	peerInfos, err := b.LoadPeers(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(peerInfos))
+	require.Equal(t, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"}, peerInfos[0])
+	require.Equal(t, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"}, peerInfos[1])
 
-		entries, err := st.Entries(2, 4, 10)
-		require.NoError(t, err)
-		require.Equal(t,
-			[]raftpb.Entry{
-				{Index: 2, Term: 1, Type: raftpb.EntryNormal, Data: []byte("world")},
-				{Index: 3, Term: 2, Type: raftpb.EntryNormal, Data: []byte("hi")},
-			},
-			entries,
-		)
+	err = b.RemovePeer(ctx, 3)
+	require.NoError(t, err)
 
-		minIdx, err := st.FirstIndex()
-		require.NoError(t, err)
-		require.Equal(t, uint64(1), minIdx)
-		maxIdx, err := st.LastIndex()
-		require.NoError(t, err)
-		require.Equal(t, uint64(4), maxIdx)
+	hs, cs, err := st.InitialState()
+	require.NoError(t, err)
+	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
+	require.Equal(t, raftpb.HardState{Term: 2, Vote: 12, Commit: 101}, hs)
 
-		err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}})
-		require.NoError(t, err)
+	err = b.SaveApplied(ctx, 10, 123)
+	require.NoError(t, err)
 
-		err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"})
-		require.NoError(t, err)
-		err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"})
-		require.NoError(t, err)
-		peerInfos, err := b.LoadPeers(ctx)
-		require.NoError(t, err)
-		require.Equal(t, 2, len(peerInfos))
-		require.Equal(t, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"}, peerInfos[0])
-		require.Equal(t, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"}, peerInfos[1])
-
-		err = b.RemovePeer(ctx, 3)
-		require.NoError(t, err)
-
-		hs, cs, err := st.InitialState()
-		require.NoError(t, err)
-		require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
-		require.Equal(t, raftpb.HardState{Term: 2, Vote: 12, Commit: 101}, hs)
-
-		err = b.SaveApplied(ctx, 10, 123)
-		require.NoError(t, err)
-
+	/*
 		snap, err := st.Snapshot()
 		require.NoError(t, err)
 		require.Equal(t, uint64(10), snap.Metadata.Term)

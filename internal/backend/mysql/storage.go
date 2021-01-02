@@ -17,7 +17,7 @@ import (
 func (b *Backend) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := context.Background()
 	query := `SELECT hardstate_term, hardstate_vote, hardstate_commit, confstate
-			FROM state WHERE rowid = 1`
+			FROM state WHERE id = 1`
 	row := b.raftdb.QueryRowContext(ctx, query)
 	hard := raftpb.HardState{}
 	var confBytes []byte
