@@ -116,5 +116,14 @@ func (b *Backend) FirstIndex() (uint64, error) {
 
 // Snapshot returns the most recent snapshot.
 func (b *Backend) Snapshot() (raftpb.Snapshot, error) {
+	ctx := context.Background()
+	query := `SELECT term, idx FROM state WHERE id = 1`
+	row := b.raftdb.QueryRowContext(ctx, query)
+
+	snapMeta := raftpb.SnapshotMetadata{}
+	err := row.Scan(&snapMeta.Term, &snapMeta.Index)
+	if err != nil {
+		return raftpb.Snapshot{}, errors.Wrap(err, "retrieving raft state")
+	}
 	return raftpb.Snapshot{}, nil
 }

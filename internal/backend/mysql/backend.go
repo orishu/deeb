@@ -289,13 +289,18 @@ func (b *Backend) RemoveSavedSnapshot(ctx context.Context, snapHandle uint64) er
 }
 
 func (b *Backend) ExecSQL(ctx context.Context, term uint64, idx uint64, sql string) error {
-	// TODO: run the query
-
+	_, err := b.maindb.ExecContext(ctx, sql)
+	if err != nil {
+		if e, ok := err.(*mysqldrv.MySQLError); ok {
+			err = &backend.DBError{Cause: e}
+		}
+		return err
+	}
 	return b.SaveApplied(ctx, term, idx)
 }
 
 func (b *Backend) QuerySQL(ctx context.Context, sql string) (*sql.Rows, error) {
-	return nil, nil
+	return b.maindb.QueryContext(ctx, sql)
 }
 
 func queryInteger(ctx context.Context, db *sql.DB, query string, args ...interface{}) (uint64, error) {
