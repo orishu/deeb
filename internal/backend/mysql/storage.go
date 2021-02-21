@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"math"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -114,7 +115,8 @@ func (b *Backend) FirstIndex() (uint64, error) {
 	return queryInteger(ctx, b.raftdb, query)
 }
 
-// Snapshot returns the most recent snapshot.
+// Snapshot returns not the actual snapshot, but a reference to how to fetch a
+// snapshot through an SSH port.
 func (b *Backend) Snapshot() (raftpb.Snapshot, error) {
 	ctx := context.Background()
 	query := `SELECT term, idx FROM state WHERE id = 1`
@@ -125,5 +127,16 @@ func (b *Backend) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		return raftpb.Snapshot{}, errors.Wrap(err, "retrieving raft state")
 	}
-	return raftpb.Snapshot{}, nil
+	snapRef := snapshotReference{
+		Addr:    b.addr,
+		SSHPort: b.sshPort,
+	}
+	snapRefBytes, err := json.Marshal(snapRef)
+	if err != nil {
+		return raftpb.Snapshot{}, errors.Wrap(err, "marshaling snapshot reference struct")
+	}
+	return raftpb.Snapshot{
+		Data:     snapRefBytes,
+		Metadata: snapMeta,
+	}, nil
 }

@@ -85,6 +85,16 @@ func (k *KubeHelper) EnsureSecret(ctx context.Context, secretName string, secret
 	return nil
 }
 
+func ExtractBytesFromSecretYAML(secretYAML string, key string) ([]byte, error) {
+	var secret corev1.Secret
+	err := yaml.Unmarshal([]byte(secretYAML), &secret)
+	if err != nil {
+		return nil, err
+	}
+	data, _ := secret.Data[key]
+	return data, nil
+}
+
 func (k *KubeHelper) EnsurePod(ctx context.Context, podName string, podYAML string) error {
 	pods := k.kube.CoreV1().Pods(k.namespace)
 	pod, err := pods.Get(ctx, podName, metav1.GetOptions{})

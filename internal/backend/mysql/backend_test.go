@@ -2,6 +2,9 @@ package mysql
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -29,15 +32,28 @@ func Test_basic_mysql_access(t *testing.T) {
 	err = kubeHelper.WaitForPodToBeReady(ctx, podName, 30)
 	require.NoError(t, err)
 
-	ports, err := freeport.GetFreePorts(1)
+	ports, err := freeport.GetFreePorts(2)
 	require.NoError(t, err)
 	mysqlPort := ports[0]
+	sshPort := ports[1]
 
-	portForwardCloser, err := kubeHelper.PortForward(podName, mysqlPort, 3306)
+	portForwardCloser1, err := kubeHelper.PortForward(podName, mysqlPort, 3306)
 	require.NoError(t, err)
-	defer portForwardCloser()
+	defer portForwardCloser1()
+	portForwardCloser2, err := kubeHelper.PortForward(podName, sshPort, 22)
+	require.NoError(t, err)
+	defer portForwardCloser2()
 
-	b, st := New(Params{EntriesToRetain: 5, MysqlPort: mysqlPort}, logger)
+	privKey, err := lib.ExtractBytesFromSecretYAML(sshSecretSpec, "id_rsa")
+	require.NoError(t, err)
+
+	b, st := New(Params{
+		EntriesToRetain: 5,
+		Addr:            "localhost",
+		MysqlPort:       mysqlPort,
+		SSHPort:         sshPort,
+		PrivateKey:      privKey,
+	}, logger)
 	err = b.Start(ctx)
 	defer b.Stop(ctx)
 	require.NoError(t, err)
@@ -107,13 +123,13 @@ func Test_basic_mysql_access(t *testing.T) {
 	err = b.SaveApplied(ctx, 10, 123)
 	require.NoError(t, err)
 
-	err = b.ExecSQL(ctx, 1, 1, "CREATE DATABASE IF NOT EXISTS unittest")
+	err = b.ExecSQL(ctx, 10, 1, "CREATE DATABASE IF NOT EXISTS unittest")
 	require.NoError(t, err)
-	err = b.ExecSQL(ctx, 1, 2, "DROP TABLE IF EXISTS unittest.table1")
+	err = b.ExecSQL(ctx, 10, 2, "DROP TABLE IF EXISTS unittest.table1")
 	require.NoError(t, err)
-	err = b.ExecSQL(ctx, 1, 3, "CREATE TABLE unittest.table1 (col1 INT, col2 INT)")
+	err = b.ExecSQL(ctx, 10, 3, "CREATE TABLE unittest.table1 (col1 INT, col2 INT)")
 	require.NoError(t, err)
-	err = b.ExecSQL(ctx, 1, 4, "INSERT INTO unittest.table1 (col1, col2) VALUES (100, 200), (101, 201)")
+	err = b.ExecSQL(ctx, 10, 4, "INSERT INTO unittest.table1 (col1, col2) VALUES (100, 200), (101, 201)")
 	require.NoError(t, err)
 	rows, err := b.QuerySQL(ctx, "SELECT col1, col2 FROM unittest.table1")
 	require.NoError(t, err)
@@ -130,11 +146,31 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.Equal(t, 201, v2)
 	require.False(t, rows.Next())
 
+	snap, err := st.Snapshot()
+	require.NoError(t, err)
+	require.Equal(t, uint64(10), snap.Metadata.Term)
+	require.Equal(t, uint64(4), snap.Metadata.Index)
+
+	var snapRef snapshotReference
+	err = json.Unmarshal(snap.Data, &snapRef)
+	require.NoError(t, err)
+	require.Equal(t, "localhost", snapRef.Addr)
+	require.Equal(t, sshPort, snapRef.SSHPort)
+
+	backupCommand := "xtrabackup --backup --databases-exclude=raft --compress --stream=xbstream -u root"
+	session, err := lib.RunSSHCommand("localhost", sshPort, "mysql", privKey, backupCommand)
+	require.NoError(t, err)
+
+	snapOutFile, err := os.OpenFile("snap.bin", os.O_RDWR|os.O_CREATE, 0644)
+	require.NoError(t, err)
+	outPipe, err := session.StdoutPipe()
+	require.NoError(t, err)
+	_, err = io.Copy(snapOutFile, outPipe)
+	_ = snapOutFile.Close()
+	session.Close()
+	require.NoError(t, err)
+
 	/*
-		snap, err := st.Snapshot()
-		require.NoError(t, err)
-		require.Equal(t, uint64(10), snap.Metadata.Term)
-		require.Equal(t, uint64(123), snap.Metadata.Index)
 		tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)
 		_, err = io.Copy(tarFile, bytes.NewReader(snap.Data))
 		require.NoError(t, err)

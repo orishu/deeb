@@ -3,7 +3,11 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
@@ -11,13 +15,23 @@ import (
 	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/golang/protobuf/proto"
 	"github.com/orishu/deeb/internal/backend"
+	"github.com/orishu/deeb/internal/lib"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/ssh"
 )
 
 type Params struct {
+	Addr            string
 	MysqlPort       int
+	SSHPort         int
+	PrivateKey      []byte
 	EntriesToRetain uint64
+}
+
+type snapshotReference struct {
+	Addr    string `json:"addr"`
+	SSHPort int    `json:"ssh_port"`
 }
 
 func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Storage) {
@@ -25,7 +39,10 @@ func New(params Params, logger *zap.SugaredLogger) (backend.DBBackend, raft.Stor
 		mgmtDBName:      "mgmt",
 		raftDBName:      "raft",
 		entriesToRetain: params.EntriesToRetain,
+		addr:            params.Addr,
 		mysqlPort:       params.MysqlPort,
+		sshPort:         params.SSHPort,
+		privateKey:      params.PrivateKey,
 		logger:          logger,
 	}
 	return b, b
@@ -36,7 +53,10 @@ type Backend struct {
 	mgmtDBName      string
 	raftDBName      string
 	entriesToRetain uint64
+	addr            string
 	mysqlPort       int
+	sshPort         int
+	privateKey      []byte
 	maindb          *sql.DB
 	mgmtdb          *sql.DB
 	raftdb          *sql.DB
@@ -276,6 +296,94 @@ func (b *Backend) RemovePeer(ctx context.Context, nodeID uint64) error {
 }
 
 func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error {
+	/*
+		_, err := b.maindb.ExecContext(ctx, "FLUSH TABLES WITH READ LOCK")
+		if err != nil {
+			return errors.Wrap(err, "flushing tables")
+		}
+		toRevert := true
+		defer func() {
+			if toRevert {
+				_, _ = b.maindb.ExecContext(ctx, "SET GLOBAL read_only = 0")
+				_, _ = b.maindb.ExecContext(ctx, "UNLOCK TABLES")
+			}
+		}()
+		_, err = b.maindb.ExecContext(ctx, "SET GLOBAL read_only = 1")
+		if err != nil {
+			return errors.Wrap(err, "setting read-only")
+		}
+	*/
+	var snapRef snapshotReference
+	err := json.Unmarshal(snap.Data, &snapRef)
+	if err != nil {
+		return errors.Wrap(err, "unmarshaling snapshot reference")
+	}
+
+	backupCmd := "xtrabackup --backup --databases-exclude=raft --stream=xbstream --compress -u root"
+	remoteSSH, err := lib.RunSSHCommand(snapRef.Addr, snapRef.SSHPort, "mysql", b.privateKey, backupCmd)
+	if err != nil {
+		return errors.Wrapf(err, "running ssh backup command: %s", backupCmd)
+	}
+	defer remoteSSH.Close()
+	restoreCmd := "bash -c 'cd /var/lib/mysql && rm -rf restore && mkdir restore && cd restore && xbstream -x'"
+	localSSH, err := lib.RunSSHCommand("localhost", b.sshPort, "mysql", b.privateKey, restoreCmd)
+	if err != nil {
+		return errors.Wrapf(err, "running ssh restore command: %s", restoreCmd)
+	}
+	defer localSSH.Close()
+
+	remoteStdout, err := remoteSSH.StdoutPipe()
+	if err != nil {
+		return errors.Wrap(err, "creating remote stdout")
+	}
+	localStdin, err := localSSH.StdinPipe()
+	if err != nil {
+		return errors.Wrap(err, "creating local stdin")
+	}
+	_, err = io.Copy(localStdin, remoteStdout)
+	if err != nil {
+		return wrapErrorAndAddStdoutStderr(err, "piping snapshot reader->writer", localSSH)
+	}
+	remoteSSH.Close()
+	localSSH.Close()
+
+	_, err = b.maindb.ExecContext(ctx, "SHUTDOWN")
+	if err != nil {
+		return errors.Wrap(err, "shutting down")
+	}
+	time.Sleep(3 * time.Second) // TODO: make it more scientific
+
+	prepareCmd := "xtrabackup --prepare -u root --target-dir=/var/lib/mysql"
+	localSSH2, err := lib.RunSSHCommand("localhost", b.sshPort, "mysql", b.privateKey, prepareCmd)
+	if err != nil {
+		return errors.Wrapf(err, "running ssh prepare command: %s", prepareCmd)
+	}
+	defer localSSH2.Close()
+
+	// TODO HERE: wait and check exit code
+
+	if err != nil {
+		return wrapErrorAndAddStdoutStderr(err, "running ssh prepare", localSSH2)
+	}
+
+	// Wait for mysql container to restart
+	for i := 0; i < 60; i++ {
+		err = b.innerStart(ctx, false)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	err = b.SaveConfState(ctx, &snap.Metadata.ConfState)
+	if err != nil {
+		return errors.Wrap(err, "saving conf state from snapshot")
+	}
+	err = b.SaveApplied(ctx, snap.Metadata.Term, snap.Metadata.Index)
+	if err != nil {
+		return errors.Wrap(err, "saving term and index from snapshot")
+	}
+
 	return nil
 }
 
@@ -311,4 +419,17 @@ func queryInteger(ctx context.Context, db *sql.DB, query string, args ...interfa
 		return 0, errors.Wrapf(err, "query: %s %+v", query, args)
 	}
 	return result, nil
+}
+
+func wrapErrorAndAddStdoutStderr(err error, msg string, session *ssh.Session) error {
+	outBytes := []byte{}
+	if outPipe, err := session.StdoutPipe(); err != nil {
+		outBytes, _ = ioutil.ReadAll(outPipe)
+	}
+	errBytes := []byte{}
+	if errPipe, err := session.StderrPipe(); err != nil {
+		errBytes, _ = ioutil.ReadAll(errPipe)
+	}
+	msg = fmt.Sprintf("%s\n===== stdout =====%s\n===== stderr =====\n%s", msg, string(outBytes), string(errBytes))
+	return errors.Wrap(err, msg)
 }
