@@ -10,11 +10,13 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func RunSSHCommand(addr string, port int, user string, pemBytes []byte, command string) (*ssh.Session, error) {
+// MakeSSHSession starts a session for running a command. Returns the session and
+// the stderr pipe.
+func MakeSSHSession(addr string, port int, user string, pemBytes []byte) (*ssh.Session, io.Reader, error) {
 	addrPort := fmt.Sprintf("%s:%d", addr, port)
 	signer, err := ssh.ParsePrivateKey(pemBytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing private key")
+		return nil, nil, errors.Wrap(err, "parsing private key")
 	}
 
 	sshConfig := &ssh.ClientConfig{
@@ -24,7 +26,7 @@ func RunSSHCommand(addr string, port int, user string, pemBytes []byte, command 
 	}
 	client, err := ssh.Dial("tcp", addrPort, sshConfig)
 	if err != nil {
-		return nil, errors.Wrapf(err, "dialing to %s", addrPort)
+		return nil, nil, errors.Wrapf(err, "dialing to %s", addrPort)
 	}
 
 	toCloseClient := true
@@ -35,27 +37,15 @@ func RunSSHCommand(addr string, port int, user string, pemBytes []byte, command 
 	}()
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, errors.Wrap(err, "starting session")
+		return nil, nil, errors.Wrap(err, "starting session")
 	}
-	_, err = session.StdoutPipe()
+	stderr, err := session.StderrPipe()
 	if err != nil {
-		return nil, errors.Wrap(err, "creating stdout pipe")
-	}
-	_, err = session.StderrPipe()
-	if err != nil {
-		return nil, errors.Wrap(err, "creating stderr pipe")
-	}
-	_, err = session.StdinPipe()
-	if err != nil {
-		return nil, errors.Wrap(err, "creating stdin pipe")
-	}
-	err = session.Start(command)
-	if err != nil {
-		return nil, errors.Wrapf(err, "starting command: %s", command)
+		return nil, nil, errors.Wrap(err, "creating stderr pipe")
 	}
 
 	toCloseClient = false
-	return session, nil
+	return session, stderr, nil
 }
 
 // SSHRespondingServer is a mock sshd server that expects a command and writes

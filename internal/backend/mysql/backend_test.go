@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/orishu/deeb/internal/backend"
@@ -32,10 +33,11 @@ func Test_basic_mysql_access(t *testing.T) {
 	err = kubeHelper.WaitForPodToBeReady(ctx, podName, 30)
 	require.NoError(t, err)
 
-	ports, err := freeport.GetFreePorts(2)
+	ports, err := freeport.GetFreePorts(3)
 	require.NoError(t, err)
 	mysqlPort := ports[0]
 	sshPort := ports[1]
+	mockSourceSSHPort := ports[2]
 
 	portForwardCloser1, err := kubeHelper.PortForward(podName, mysqlPort, 3306)
 	require.NoError(t, err)
@@ -157,19 +159,47 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.Equal(t, "localhost", snapRef.Addr)
 	require.Equal(t, sshPort, snapRef.SSHPort)
 
-	backupCommand := "xtrabackup --backup --databases-exclude=raft --compress --stream=xbstream -u root"
-	session, err := lib.RunSSHCommand("localhost", sshPort, "mysql", privKey, backupCommand)
+	backupCommand := "xtrabackup --backup --databases-exclude=raft --stream=xbstream -u root"
+	session, _, err := lib.MakeSSHSession("localhost", sshPort, "mysql", privKey)
 	require.NoError(t, err)
 
 	snapOutFile, err := os.OpenFile("snap.bin", os.O_RDWR|os.O_CREATE, 0644)
 	require.NoError(t, err)
+	// TODO: defer os.Remove("snap.bin")
+
 	outPipe, err := session.StdoutPipe()
+	require.NoError(t, err)
+	err = session.Start(backupCommand)
 	require.NoError(t, err)
 	_, err = io.Copy(snapOutFile, outPipe)
 	_ = snapOutFile.Close()
 	session.Close()
 	require.NoError(t, err)
 
+	expectedCommand := "xtrabackup --backup --databases-exclude=raft --stream=xbstream -u root"
+	snapFile, err := os.Open("snap.bin")
+	defer snapFile.Close()
+
+	mockSSHServer := lib.NewSSHRespondingServer(
+		mockSourceSSHPort,
+		privKey, // use something as host key
+		expectedCommand,
+		snapFile,
+		logger,
+	)
+	mockSSHServer.StartAsync()
+	defer mockSSHServer.Stop()
+	time.Sleep(time.Second)
+
+	// Restore from snapshot
+	snapMeta := raftpb.SnapshotMetadata{Term: 10, Index: 4, ConfState: cs}
+	snapRefData, err := json.Marshal(snapRef)
+	require.NoError(t, err)
+	snap2 := raftpb.Snapshot{Data: snapRefData, Metadata: snapMeta}
+	err = b.ApplySnapshot(ctx, snap2)
+	require.NoError(t, err)
+
+	mockSSHServer.Stop()
 	/*
 		tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)
 		_, err = io.Copy(tarFile, bytes.NewReader(snap.Data))
