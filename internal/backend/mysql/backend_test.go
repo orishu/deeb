@@ -32,6 +32,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	podName := "t1-deeb-0"
 	err = kubeHelper.WaitForPodToBeReady(ctx, podName, 30)
 	require.NoError(t, err)
+	time.Sleep(time.Second)
 
 	ports, err := freeport.GetFreePorts(3)
 	require.NoError(t, err)

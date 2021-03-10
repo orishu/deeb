@@ -9,6 +9,7 @@ metadata:
 data:
   repl.cnf: |-
     [mysqld]
+    datadir=/var/lib/mysql/active
     gtid_mode=ON
     enforce_gtid_consistency=ON
 `
@@ -115,6 +116,9 @@ spec:
           name: data
         - mountPath: /var/secrets
           name: ssh-keys
+        - mountPath: /etc/my.cnf.d/repl.cnf
+          name: configurations
+          subPath: repl.cnf
       dnsPolicy: ClusterFirst
       initContainers:
       - command:

@@ -74,6 +74,9 @@ func (b *Backend) innerStart(ctx context.Context, create bool) error {
 	if err != nil {
 		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
 	}
+	if b.maindb != nil {
+		b.maindb.Close()
+	}
 	b.maindb = db
 	if create {
 		return b.createTables(ctx)
@@ -303,11 +306,12 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	toRevert := true
 	defer func() {
 		if toRevert {
+			_, _ = b.maindb.ExecContext(ctx, "RESET PERSIST IF EXISTS read_only")
 			_, _ = b.maindb.ExecContext(ctx, "SET GLOBAL read_only = 0")
 			_, _ = b.maindb.ExecContext(ctx, "UNLOCK TABLES")
 		}
 	}()
-	_, err = b.maindb.ExecContext(ctx, "SET GLOBAL read_only = 1")
+	_, err = b.maindb.ExecContext(ctx, "SET PERSIST read_only = 1")
 	if err != nil {
 		return errors.Wrap(err, "setting read-only")
 	}
@@ -380,6 +384,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	if err != nil {
 		return errors.Wrap(err, "database did not come up (1)")
 	}
+	_, _ = b.maindb.ExecContext(ctx, "RESET PERSIST IF EXISTS read_only")
 
 	// Shut down the database one more time, as it will now come up with
 	// the restored data.
@@ -401,8 +406,6 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	if err != nil {
 		return errors.Wrap(err, "saving term and index from snapshot")
 	}
-
-	// TODO: if we set the database to read-only by config, change it back.
 
 	return nil
 }
@@ -436,7 +439,10 @@ func (b *Backend) waitForDatabaseToComeUp(ctx context.Context, attempts int) err
 	for i := 0; i < attempts; i++ {
 		err = b.innerStart(ctx, false)
 		if err == nil {
-			break
+			_, err2 := b.maindb.ExecContext(ctx, "SELECT 1")
+			if err2 != nil {
+				break
+			}
 		}
 		time.Sleep(time.Second)
 	}
