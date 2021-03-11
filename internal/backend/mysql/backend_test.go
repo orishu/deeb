@@ -160,7 +160,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.Equal(t, "localhost", snapRef.Addr)
 	require.Equal(t, sshPort, snapRef.SSHPort)
 
-	backupCommand := "xtrabackup --backup --databases-exclude=raft --stream=xbstream -u root"
+	backupCommand := "xtrabackup --backup --stream=xbstream -u root"
 	session, _, err := lib.MakeSSHSession("localhost", sshPort, "mysql", privKey)
 	require.NoError(t, err)
 
@@ -200,7 +200,6 @@ func Test_basic_mysql_access(t *testing.T) {
 	err = b.ApplySnapshot(ctx, snap2)
 	require.NoError(t, err)
 
-	mockSSHServer.Stop()
 	/*
 		tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)
 		_, err = io.Copy(tarFile, bytes.NewReader(snap.Data))

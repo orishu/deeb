@@ -322,7 +322,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		return errors.Wrap(err, "unmarshaling snapshot reference")
 	}
 
-	backupCmd := "xtrabackup --backup --databases-exclude=raft --stream=xbstream -u root"
+	backupCmd := "xtrabackup --backup --stream=xbstream -u root"
 	remoteSSH, remoteStderr, err := lib.MakeSSHSession(snapRef.Addr, snapRef.SSHPort, "mysql", b.privateKey)
 	remoteStdout, err := remoteSSH.StdoutPipe()
 	if err != nil {
@@ -358,16 +358,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	remoteSSH.Close()
 	localSSH.Close()
 
-	// TODO: need to make sure that the database restarts with read-only
-	// until we are done with the "prepare" step.
-
-	_, err = b.maindb.ExecContext(ctx, "SHUTDOWN")
-	if err != nil {
-		return errors.Wrap(err, "shutting down")
-	}
-	time.Sleep(3 * time.Second) // TODO: make it less arbitrary
-
-	prepareCmd := "xtrabackup --prepare -u root --target-dir=/var/lib/mysql/restore"
+	prepareCmd := "xtrabackup --prepare --databases-exclude=raft -u root --target-dir=/var/lib/mysql/restore"
 	localSSH2, localStderr2, err := lib.MakeSSHSession("localhost", b.sshPort, "mysql", b.privateKey)
 	if err != nil {
 		return errors.Wrapf(err, "running ssh prepare command: %s", prepareCmd)
@@ -380,19 +371,15 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	}
 	localSSH2.Close()
 
-	err = b.waitForDatabaseToComeUp(ctx, 60)
-	if err != nil {
-		return errors.Wrap(err, "database did not come up (1)")
-	}
 	_, _ = b.maindb.ExecContext(ctx, "RESET PERSIST IF EXISTS read_only")
 
 	// Shut down the database one more time, as it will now come up with
 	// the restored data.
 	_, _ = b.maindb.ExecContext(ctx, "SHUTDOWN")
 	time.Sleep(3 * time.Second) // TODO: make it less arbitrary
-	err = b.waitForDatabaseToComeUp(ctx, 60)
+	err = b.waitForDatabaseToComeUp(ctx, 300)
 	if err != nil {
-		return errors.Wrap(err, "database did not come up (2)")
+		return errors.Wrap(err, "database did not come up")
 	}
 
 	err = b.SaveConfState(ctx, &snap.Metadata.ConfState)
@@ -440,7 +427,7 @@ func (b *Backend) waitForDatabaseToComeUp(ctx context.Context, attempts int) err
 		err = b.innerStart(ctx, false)
 		if err == nil {
 			_, err2 := b.maindb.ExecContext(ctx, "SELECT 1")
-			if err2 != nil {
+			if err2 == nil {
 				break
 			}
 		}
