@@ -2,7 +2,6 @@ package lib
 
 import (
 	"encoding/base64"
-	"io"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -21,20 +20,13 @@ func Test_mock_sshd_basic(t *testing.T) {
 
 	decodedHostKey, err := base64.StdEncoding.DecodeString(hostKey)
 	srv := NewSSHRespondingServer(
-		port, decodedHostKey, "some-command", strings.NewReader("some data"), NewDevelopmentLogger())
+		port, decodedHostKey, "some_command", strings.NewReader("some data"), NewDevelopmentLogger())
 
 	srv.StartAsync()
 	time.Sleep(time.Second)
 
 	portStr := strconv.Itoa(port)
-	cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", "-p", portStr, "localhost")
-	stdin, err := cmd.StdinPipe()
-	require.NoError(t, err)
-
-	go func() {
-		io.WriteString(stdin, "some-command")
-		stdin.Close()
-	}()
+	cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", "-p", portStr, "localhost", "some_command")
 
 	output, _ := cmd.Output()
 	require.Equal(t, "some data", string(output))

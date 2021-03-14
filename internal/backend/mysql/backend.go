@@ -299,22 +299,16 @@ func (b *Backend) RemovePeer(ctx context.Context, nodeID uint64) error {
 
 func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error {
 	// Before applying the snapshot, set the database to read-only.
-	_, err := b.maindb.ExecContext(ctx, "FLUSH TABLES WITH READ LOCK")
+	_, err := b.maindb.ExecContext(ctx, "SHUTDOWN")
 	if err != nil {
-		return errors.Wrap(err, "flushing tables")
+		return errors.Wrap(err, "shutting down")
 	}
-	toRevert := true
-	defer func() {
-		if toRevert {
-			_, _ = b.maindb.ExecContext(ctx, "RESET PERSIST IF EXISTS read_only")
-			_, _ = b.maindb.ExecContext(ctx, "SET GLOBAL read_only = 0")
-			_, _ = b.maindb.ExecContext(ctx, "UNLOCK TABLES")
-		}
-	}()
-	_, err = b.maindb.ExecContext(ctx, "SET PERSIST read_only = 1")
+	// Remove data dir files and chmod to 000 so mysqld restarts will crashloop until ready.
+	err = b.runSSHCommand("bash -c 'rm -rf /var/lib/mysql/active/* && chmod 000 /var/lib/mysql/active'")
 	if err != nil {
-		return errors.Wrap(err, "setting read-only")
+		return errors.Wrap(err, "removing old data dir and chmod-ing to 000")
 	}
+	defer b.runSSHCommand("chmod 755 /var/lib/mysql/active && rm -rf /var/lib/mysql/active/*")
 
 	var snapRef snapshotReference
 	err = json.Unmarshal(snap.Data, &snapRef)
@@ -333,7 +327,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		return errors.Wrapf(err, "running ssh backup command: %s", backupCmd)
 	}
 	defer remoteSSH.Close()
-	restoreCmd := "bash -c 'cd /var/lib/mysql && rm -rf restore && mkdir restore && cd restore && xbstream -x'"
+	restoreCmd := "bash -c 'cd /var/lib/mysql && rm -rf restore new && mkdir restore new && cd restore && xbstream -x'"
 	localSSH, localStderr, err := lib.MakeSSHSession("localhost", b.sshPort, "mysql", b.privateKey)
 	if err != nil {
 		return errors.Wrapf(err, "creating local ssh")
@@ -348,7 +342,8 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		return errors.Wrapf(err, "running ssh restore command: %s", restoreCmd)
 	}
 
-	_, err = io.Copy(localStdin, remoteStdout)
+	pipedBytes, err := io.Copy(localStdin, remoteStdout)
+	b.logger.Infof("Piped xtrabackup bytes: %d", pipedBytes)
 	if err != nil {
 		remoteErrBytes, _ := ioutil.ReadAll(remoteStderr)
 		localErrBytes, _ := ioutil.ReadAll(localStderr)
@@ -358,42 +353,31 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	remoteSSH.Close()
 	localSSH.Close()
 
-	prepareCmd := "xtrabackup --prepare --databases-exclude=raft -u root --target-dir=/var/lib/mysql/restore"
-	localSSH2, localStderr2, err := lib.MakeSSHSession("localhost", b.sshPort, "mysql", b.privateKey)
+	prepAndMove := "bash -c 'xtrabackup --prepare --datadir=/var/lib/mysql/new -u root --target-dir=/var/lib/mysql/restore && xtrabackup --datadir=/var/lib/mysql/new --move-back --target-dir=/var/lib/mysql/restore && cd /var/lib/mysql && chmod 755 active && rm -rf active && mv new active'"
+	err = b.runSSHCommand(prepAndMove)
 	if err != nil {
-		return errors.Wrapf(err, "running ssh prepare command: %s", prepareCmd)
+		return errors.Wrap(err, "preparing snapshot data and moving to active directory")
 	}
-	defer localSSH2.Close()
 
-	err = localSSH2.Run(prepareCmd)
-	if err != nil {
-		return wrapErrorAndAddStderr(err, "running ssh prepare", localStderr2)
-	}
-	localSSH2.Close()
-
-	_, _ = b.maindb.ExecContext(ctx, "RESET PERSIST IF EXISTS read_only")
-
-	// Shut down the database one more time, as it will now come up with
-	// the restored data.
-	_, _ = b.maindb.ExecContext(ctx, "SHUTDOWN")
-	time.Sleep(3 * time.Second) // TODO: make it less arbitrary
-	err = b.waitForDatabaseToComeUp(ctx, 300)
+	err = b.waitForDatabaseToComeUp(ctx, 360)
 	if err != nil {
 		return errors.Wrap(err, "database did not come up")
 	}
 
-	err = b.SaveConfState(ctx, &snap.Metadata.ConfState)
-	if err != nil {
-		return errors.Wrap(err, "saving conf state from snapshot")
-	}
+	return nil
+}
 
-	// TODO: need to fetch the term and index from the restored raft
-	// database, but keep the local raft db.
-	err = b.SaveApplied(ctx, snap.Metadata.Term, snap.Metadata.Index)
+func (b *Backend) runSSHCommand(command string) error {
+	localSSH, localStderr, err := lib.MakeSSHSession("localhost", b.sshPort, "mysql", b.privateKey)
 	if err != nil {
-		return errors.Wrap(err, "saving term and index from snapshot")
+		return errors.Wrapf(err, "starting SSH session for command [%s]", command)
 	}
+	defer localSSH.Close()
 
+	err = localSSH.Run(command)
+	if err != nil {
+		return wrapErrorAndAddStderr(err, fmt.Sprintf("running command [%s]", command), localStderr)
+	}
 	return nil
 }
 

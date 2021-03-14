@@ -134,20 +134,24 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.NoError(t, err)
 	err = b.ExecSQL(ctx, 10, 4, "INSERT INTO unittest.table1 (col1, col2) VALUES (100, 200), (101, 201)")
 	require.NoError(t, err)
-	rows, err := b.QuerySQL(ctx, "SELECT col1, col2 FROM unittest.table1")
-	require.NoError(t, err)
-	require.True(t, rows.Next())
-	var v1, v2 int
-	err = rows.Scan(&v1, &v2)
-	require.NoError(t, err)
-	require.Equal(t, 100, v1)
-	require.Equal(t, 200, v2)
-	require.True(t, rows.Next())
-	err = rows.Scan(&v1, &v2)
-	require.NoError(t, err)
-	require.Equal(t, 101, v1)
-	require.Equal(t, 201, v2)
-	require.False(t, rows.Next())
+
+	checkTable1 := func() {
+		rows, err := b.QuerySQL(ctx, "SELECT col1, col2 FROM unittest.table1")
+		require.NoError(t, err)
+		require.True(t, rows.Next())
+		var v1, v2 int
+		err = rows.Scan(&v1, &v2)
+		require.NoError(t, err)
+		require.Equal(t, 100, v1)
+		require.Equal(t, 200, v2)
+		require.True(t, rows.Next())
+		err = rows.Scan(&v1, &v2)
+		require.NoError(t, err)
+		require.Equal(t, 101, v1)
+		require.Equal(t, 201, v2)
+		require.False(t, rows.Next())
+	}
+	checkTable1()
 
 	snap, err := st.Snapshot()
 	require.NoError(t, err)
@@ -177,7 +181,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	session.Close()
 	require.NoError(t, err)
 
-	expectedCommand := "xtrabackup --backup --databases-exclude=raft --stream=xbstream -u root"
+	expectedCommand := "xtrabackup --backup --stream=xbstream -u root"
 	snapFile, err := os.Open("snap.bin")
 	defer snapFile.Close()
 
@@ -194,11 +198,19 @@ func Test_basic_mysql_access(t *testing.T) {
 
 	// Restore from snapshot
 	snapMeta := raftpb.SnapshotMetadata{Term: 10, Index: 4, ConfState: cs}
-	snapRefData, err := json.Marshal(snapRef)
-	require.NoError(t, err)
-	snap2 := raftpb.Snapshot{Data: snapRefData, Metadata: snapMeta}
-	err = b.ApplySnapshot(ctx, snap2)
-	require.NoError(t, err)
+	time.Sleep(10 * time.Minute)
+	_ = snapMeta
+
+	/*
+
+		snapRefData, err := json.Marshal(snapshotReference{Addr: "localhost", SSHPort: mockSourceSSHPort})
+		require.NoError(t, err)
+		snap2 := raftpb.Snapshot{Data: snapRefData, Metadata: snapMeta}
+		err = b.ApplySnapshot(ctx, snap2)
+		require.NoError(t, err)
+
+		checkTable1()
+	*/
 
 	/*
 		tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)

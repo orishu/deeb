@@ -22,7 +22,7 @@ func MakeSSHSession(addr string, port int, user string, pemBytes []byte) (*ssh.S
 	sshConfig := &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // TODO: make it secure
 	}
 	client, err := ssh.Dial("tcp", addrPort, sshConfig)
 	if err != nil {
@@ -147,27 +147,27 @@ func (rs *SSHRespondingServer) handleChannel(newChannel ssh.NewChannel) {
 		return
 	}
 
-	input := make([]byte, len(rs.expectedCommand))
-	bytesRead, err := connection.Read(input)
-	if err != nil {
-		rs.logger.Errorf("Failed reading input (%v)", err)
-		return
-	}
-	if bytesRead != len(rs.expectedCommand) || rs.expectedCommand != string(input) {
-		rs.logger.Warnf("Received unexpected command. Expected [%s], Got [%s]", rs.expectedCommand, string(input))
-		return
-	}
-
-	go func() {
-		io.Copy(connection, rs.responseReader)
-		connection.Close()
-		rs.logger.Info("Session closed")
-	}()
-
 	// Sessions have out-of-band requests such as "shell", "pty-req" and "env"
 	go func() {
 		for req := range requests {
 			switch req.Type {
+			case "exec":
+				type execMsg struct {
+					Command string
+				}
+				var msg execMsg
+				err := ssh.Unmarshal(req.Payload, &msg)
+				if msg.Command == rs.expectedCommand {
+					go func() {
+						io.Copy(connection, rs.responseReader)
+						connection.Close()
+						rs.logger.Info("Session closed")
+					}()
+				} else {
+					rs.logger.Warnf("Received unexpected command. Expected [%s], Got [%s]", rs.expectedCommand, msg.Command)
+				}
+
+				req.Reply(err == nil, nil)
 			case "shell":
 				// We only accept the default shell
 				// (i.e. no command in the Payload)
