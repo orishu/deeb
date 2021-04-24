@@ -170,7 +170,7 @@ func Test_basic_mysql_access(t *testing.T) {
 
 	snapOutFile, err := os.OpenFile("snap.bin", os.O_RDWR|os.O_CREATE, 0644)
 	require.NoError(t, err)
-	// TODO: defer os.Remove("snap.bin")
+	defer os.Remove("snap.bin")
 
 	outPipe, err := session.StdoutPipe()
 	require.NoError(t, err)
@@ -179,6 +179,9 @@ func Test_basic_mysql_access(t *testing.T) {
 	_, err = io.Copy(snapOutFile, outPipe)
 	_ = snapOutFile.Close()
 	session.Close()
+	require.NoError(t, err)
+
+	err = b.ExecSQL(ctx, 10, 5, "UPDATE unittest.table1 set col1 = 999")
 	require.NoError(t, err)
 
 	expectedCommand := "xtrabackup --backup --stream=xbstream -u root"
@@ -198,19 +201,13 @@ func Test_basic_mysql_access(t *testing.T) {
 
 	// Restore from snapshot
 	snapMeta := raftpb.SnapshotMetadata{Term: 10, Index: 4, ConfState: cs}
-	time.Sleep(10 * time.Minute)
-	_ = snapMeta
+	snapRefData, err := json.Marshal(snapshotReference{Addr: "localhost", SSHPort: mockSourceSSHPort})
+	require.NoError(t, err)
+	snap2 := raftpb.Snapshot{Data: snapRefData, Metadata: snapMeta}
+	err = b.ApplySnapshot(ctx, snap2)
+	require.NoError(t, err)
 
-	/*
-
-		snapRefData, err := json.Marshal(snapshotReference{Addr: "localhost", SSHPort: mockSourceSSHPort})
-		require.NoError(t, err)
-		snap2 := raftpb.Snapshot{Data: snapRefData, Metadata: snapMeta}
-		err = b.ApplySnapshot(ctx, snap2)
-		require.NoError(t, err)
-
-		checkTable1()
-	*/
+	checkTable1()
 
 	/*
 		tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)

@@ -73,7 +73,7 @@ func NewSSHRespondingServer(
 		expectedCommand: expectedCommand,
 		responseReader:  responseReader,
 		logger:          logger,
-		stop:            make(chan struct{}),
+		stop:            make(chan struct{}, 1),
 	}
 }
 

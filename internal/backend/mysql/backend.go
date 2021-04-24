@@ -308,7 +308,12 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	if err != nil {
 		return errors.Wrap(err, "removing old data dir and chmod-ing to 000")
 	}
-	defer b.runSSHCommand("chmod 755 /var/lib/mysql/active && rm -rf /var/lib/mysql/active/*")
+	success := false
+	defer func() {
+		if !success {
+			b.runSSHCommand("chmod 755 /var/lib/mysql/active && rm -rf /var/lib/mysql/active/*")
+		}
+	}()
 
 	var snapRef snapshotReference
 	err = json.Unmarshal(snap.Data, &snapRef)
@@ -353,7 +358,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	remoteSSH.Close()
 	localSSH.Close()
 
-	prepAndMove := "bash -c 'xtrabackup --prepare --datadir=/var/lib/mysql/new -u root --target-dir=/var/lib/mysql/restore && xtrabackup --datadir=/var/lib/mysql/new --move-back --target-dir=/var/lib/mysql/restore && cd /var/lib/mysql && chmod 755 active && rm -rf active && mv new active'"
+	prepAndMove := "bash -c 'xtrabackup --prepare --datadir=/var/lib/mysql/new -u root --target-dir=/var/lib/mysql/restore && xtrabackup --datadir=/var/lib/mysql/new --move-back --target-dir=/var/lib/mysql/restore && cd /var/lib/mysql && chown -R mysql:mysql new && chmod 755 active && rm -rf active && mv new active'"
 	err = b.runSSHCommand(prepAndMove)
 	if err != nil {
 		return errors.Wrap(err, "preparing snapshot data and moving to active directory")
@@ -364,6 +369,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		return errors.Wrap(err, "database did not come up")
 	}
 
+	success = true
 	return nil
 }
 
