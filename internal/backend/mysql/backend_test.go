@@ -181,6 +181,8 @@ func Test_basic_mysql_access(t *testing.T) {
 	session.Close()
 	require.NoError(t, err)
 
+	// Override some data so we verify that it's back to the original
+	// values after applying the snapshot.
 	err = b.ExecSQL(ctx, 10, 5, "UPDATE unittest.table1 set col1 = 999")
 	require.NoError(t, err)
 
@@ -208,56 +210,4 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.NoError(t, err)
 
 	checkTable1()
-
-	/*
-		tarFile, err := os.OpenFile(dir+"/testtar.tar", os.O_WRONLY|os.O_CREATE, 0644)
-		_, err = io.Copy(tarFile, bytes.NewReader(snap.Data))
-		require.NoError(t, err)
-		err = tarFile.Close()
-		require.NoError(t, err)
-
-		err = b.RemovePeer(ctx, 4)
-		require.NoError(t, err)
-
-		tarFile, err = os.Open(dir + "/testtar.tar")
-		require.NoError(t, err)
-		var buf bytes.Buffer
-		_, err = io.Copy(&buf, tarFile)
-		require.NoError(t, err)
-		tarFile.Close()
-
-		// Remember the current conf state
-		_, cs, err = st.InitialState()
-		require.NoError(t, err)
-
-		// Override conf state before restoring from snapshot
-		err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{13, 14}, Learners: []uint64{15}})
-		require.NoError(t, err)
-
-		// Restore from snapshot, use the remembered conf state as metadata
-		snapMeta := raftpb.SnapshotMetadata{Term: 30, Index: 300, ConfState: cs}
-		snap2 := raftpb.Snapshot{Data: buf.Bytes(), Metadata: snapMeta}
-		err = b.ApplySnapshot(ctx, snap2)
-		require.NoError(t, err)
-
-		// Check that the overriden conf state is back
-		_, cs, err = st.InitialState()
-		require.NoError(t, err)
-		require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
-
-		// Append some more entries to see older ones deleted
-		err = b.AppendEntries(ctx, []raftpb.Entry{
-			{Index: 5, Term: 2, Type: raftpb.EntryNormal, Data: []byte("one")},
-			{Index: 6, Term: 2, Type: raftpb.EntryNormal, Data: []byte("two")},
-			{Index: 7, Term: 2, Type: raftpb.EntryNormal, Data: []byte("three")},
-		})
-		require.NoError(t, err)
-
-		minIdx, err = st.FirstIndex()
-		require.NoError(t, err)
-		require.Equal(t, uint64(3), minIdx)
-		maxIdx, err = st.LastIndex()
-		require.NoError(t, err)
-		require.Equal(t, uint64(7), maxIdx)
-	*/
 }
