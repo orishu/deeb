@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "deeb.fullname" . }}-mysql-config
+  namespace: {{ .Release.Namespace }}
+data:
+  repl.cnf: |-
+    [mysqld]
+    datadir=/var/lib/mysql/active
+    gtid_mode=ON
+    enforce_gtid_consistency=ON

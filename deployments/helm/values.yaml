@@ -1,15 +1,17 @@
 ## percona image
 ## ref: https://hub.docker.com/_/percona/
-image: "percona"
+mysqlImage: "percona"
 
 ## percona image version
 ## ref: https://hub.docker.com/r/library/percona/tags/
 ##
-imageTag: "ps-8.0"
+mysqlImageTag: "ps-8.0"
+mysqlImagePullPolicy: IfNotPresent
 
 sidecarImage: "sidecar"
 sidecarImageTag: "latest"
-sidecarSecretName: my-ssh-key
+sidecarImagePullPolicy: IfNotPresent
+sidecarSecretName: test-ssh-key
 
 replicas: 1
 
@@ -31,40 +33,12 @@ mysqlAllowEmptyPassword: true
 ##
 mysqlDatabase: testdb
 
-## Specify an imagePullPolicy (Required)
-## It's recommended to change this to 'Always' if the image tag is 'latest'
-## ref: http://kubernetes.io/docs/user-guide/images/#updating-images
-##
-imagePullPolicy: IfNotPresent
-sidecarImagePullPolicy: IfNotPresent
 
-## Use an alternate scheduler, e.g. "stork".
-## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
-##
-# schedulerName: "default-scheduler"
-#
 # Custom mysql configuration files path
 configurationFilesPath: /etc/my.cnf.d/
 
-# Custom mysql configuration files used to override default mysql settings
-configurationFiles:
-  repl.cnf: |-
-    [mysqld]
-    gtid_mode=ON
-    enforce_gtid_consistency=ON
-
-#  mysql.cnf: |-
-#    [mysqld]
-#    skip-name-resolve
-#    ssl-ca=/ssl/ca.pem
-#    ssl-cert=/ssl/server-cert.pem
-#    ssl-key=/ssl/server-key.pem
-
-
 ## Persist data to a persistent volume
 persistence:
-  enabled: true
-  ## percona data Persistent Volume Storage Class
   ## If defined, storageClassName: <storageClass>
   ## If set to "-", storageClassName: "", which disables dynamic provisioning
   ## If undefined (the default) or set to null, no storageClassName spec is
@@ -78,15 +52,15 @@ persistence:
 ## Configure resource requests and limits
 ## ref: http://kubernetes.io/docs/user-guide/compute-resources/
 ##
-resources:
+mysqlResources:
   requests:
-    memory: 256Mi
     cpu: 100m
+    memory: 256Mi
 
 sidecarResources:
   requests:
-    memory: 128Mi
     cpu: 50m
+    memory: 128Mi
 
 ## Node labels for pod assignment
 ## Ref: https://kubernetes.io/docs/user-guide/node-selection/
@@ -106,13 +80,13 @@ affinity: {}
 
 ## Configure resources for the init container
 ##
-initResources: {}
-  # limits:
-  #   cpu: 25m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 25m
-  #   memory 128Mi
+initResources:
+  limits:
+    cpu: 25m
+    memory: 128Mi
+  requests:
+    cpu: 25m
+    memory: 128Mi
 
 ## Override image used by init container
 ##

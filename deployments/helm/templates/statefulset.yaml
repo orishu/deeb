@@ -3,11 +3,14 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "deeb.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "deeb.labels" . | nindent 4 }}
 spec:
   serviceName: {{ template "deeb.fullname" . }}
-  replicas: {{ .Values.replicas }}
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       {{- include "deeb.selectorLabels" . | nindent 6 }}
@@ -16,28 +19,25 @@ spec:
       labels:
         {{- include "deeb.selectorLabels" . | nindent 8 }}
     spec:
-      {{- if .Values.schedulerName }}
-      schedulerName: "{{ .Values.schedulerName }}"
-      {{- end }}
       initContainers:
-      - name: "remove-lost-found"
+      - command:
+        - rm
+        - -fr
+        - /var/lib/mysql/lost+found
         image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
         imagePullPolicy: {{ .Values.initImage.pullPolicy | quote }}
+        name: remove-lost-found
         resources:
 {{ toYaml .Values.initResources | indent 10 }}
-        command:
-        - "rm"
-        - "-fr"
-        - "/var/lib/mysql/lost+found"
         volumeMounts:
-        - name: data
-          mountPath: /var/lib/mysql
+        - mountPath: /var/lib/mysql
+          name: data
       containers:
       - name: {{ template "deeb.fullname" . }}
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-        imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+        image: "{{ .Values.mysqlImage }}:{{ .Values.mysqlImageTag }}"
+        imagePullPolicy: {{ .Values.mysqlImagePullPolicy | quote }}
         resources:
-{{ toYaml .Values.resources | indent 10 }}
+{{ toYaml .Values.mysqlResources | indent 10 }}
         env:
         {{- if .Values.mysqlAllowEmptyPassword }}
         - name: MYSQL_ALLOW_EMPTY_PASSWORD
@@ -59,62 +59,63 @@ spec:
         - name: MYSQL_DATABASE
           value: {{ default "" .Values.mysqlDatabase | quote }}
         ports:
-        - name: mysql
-          containerPort: 3306
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
         livenessProbe:
           exec:
             command:
             - mysqladmin
             - ping
+          failureThreshold: 3
           initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
           timeoutSeconds: 5
         readinessProbe:
           exec:
             command:
             - mysqladmin
             - ping
+          failureThreshold: 3
           initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
           timeoutSeconds: 1
         volumeMounts:
         - name: data
           mountPath: /var/lib/mysql
-        {{- if .Values.configurationFiles }}
-        {{- range $key, $val := .Values.configurationFiles }}
         - name: configurations
-          mountPath: {{ $.Values.configurationFilesPath }}{{ $key }}
-          subPath: {{ $key }}
-        {{- end -}}
-        {{- end }}
+          mountPath: /etc/my.cnf.d/repl.cnf
+          subPath: repl.cnf
       - name: {{ template "deeb.fullname" . }}-sidecar
         image: "{{ .Values.sidecarImage }}:{{ .Values.sidecarImageTag }}"
         imagePullPolicy: {{ .Values.sidecarImagePullPolicy | quote }}
         resources:
 {{ toYaml .Values.sidecarResources | indent 10 }}
-        volumeMounts:
-        - name: data
-          mountPath: /var/lib/mysql
-        - name: ssh-keys
-          mountPath: "/var/secrets"
         ports:
-        - name: ssh
-          containerPort: 22
+        - containerPort: 22
+          name: ssh
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: data
+        - mountPath: /var/secrets
+          name: ssh-keys
+        - mountPath: /etc/my.cnf.d/repl.cnf
+          name: configurations
+          subPath: repl.cnf
       volumes:
-      {{- if not .Values.persistence.enabled }}
-      - name: data
-        emptyDir: {}
-      {{- end -}}
-      {{- if .Values.configurationFiles }}
       - name: configurations
         configMap:
-          name: {{ template "deeb.fullname" . }}-configuration
-      {{- end }}
+          name: {{ template "deeb.fullname" . }}-mysql-config
       - name: ssh-keys
         secret:
-          secretName: {{ .Values.sidecarSecretName | quote }}
+          secretName: {{ template "deeb.fullname" . }}-{{ .Values.sidecarSecretName }}
           items:
           - key: id_rsa
-            path: id_rsa
             mode: 0400
+            path: id_rsa
           - key: id_rsa.pub
             path: id_rsa.pub
       {{- if .Values.nodeSelector }}
@@ -128,8 +129,11 @@ spec:
       {{- if .Values.tolerations }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
-      {{- end -}}
-{{- if .Values.persistence.enabled }}
+      {{- end }}
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
   volumeClaimTemplates:
   - metadata:
       name: data
@@ -137,7 +141,7 @@ spec:
         {{- include "deeb.labels" $ | nindent 8 }}
     spec:
       accessModes:
-        - {{ $.Values.persistence.accessMode | quote }}
+      - {{ $.Values.persistence.accessMode | quote }}
       resources:
         requests:
           storage: {{ $.Values.persistence.size | quote }}
@@ -148,4 +152,3 @@ spec:
       storageClassName: "{{ $.Values.persistence.storageClass }}"
     {{- end }}
     {{- end }}
-{{- end }}
