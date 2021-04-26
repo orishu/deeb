@@ -1,10 +1,5 @@
-## percona image
-## ref: https://hub.docker.com/_/percona/
-mysqlImage: "percona"
 
-## percona image version
-## ref: https://hub.docker.com/r/library/percona/tags/
-##
+mysqlImage: "percona"
 mysqlImageTag: "ps-8.0"
 mysqlImagePullPolicy: IfNotPresent
 
@@ -12,6 +7,10 @@ sidecarImage: "sidecar"
 sidecarImageTag: "latest"
 sidecarImagePullPolicy: IfNotPresent
 sidecarSecretName: test-ssh-key
+
+controllerImage: "deeb-controller"
+controllerImageTag: "latest"
+controllerImagePullPolicy: IfNotPresent
 
 replicas: 1
 

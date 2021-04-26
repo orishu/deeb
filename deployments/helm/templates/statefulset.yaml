@@ -105,6 +105,36 @@ spec:
         - mountPath: /etc/my.cnf.d/repl.cnf
           name: configurations
           subPath: repl.cnf
+      - name: {{ template "deeb.fullname" . }}-controller
+        image: "{{ .Values.controllerImage }}:{{ .Values.controllerImageTag }}"
+        imagePullPolicy: {{ .Values.controllerImagePullPolicy | quote }}
+        resources:
+{{ toYaml .Values.controllerResources | indent 10 }}
+        ports:
+        - containerPort: 10000
+          name: grpc
+          protocol: TCP
+        - containerPort: 11000
+          name: grpcgw
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /var/secrets
+          name: ssh-keys
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - "--insecure"
+            - "-X"
+            - "GET"
+            - "https://localhost:11000/api/v1/status"
+            - "-H"
+            - "accept: application/json"
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
       volumes:
       - name: configurations
         configMap:

@@ -33,7 +33,7 @@ func main() {
 	peerStr := flag.String("peers", "", "Comma-separated list of addr:port potential raft peers")
 	backend := flag.String("backend", "mysql", "Backend type: 'mysql' or 'sqlite'")
 	sqliteDBDir := flag.String("sqlitedir", "./db", "directory for the sqlite files")
-	sshPrivateKeyFile := flag.String("ssh_priv_key", "/var/secrets/id_rsa", "Path to SSH private key file used by MySQL backend")
+	sshPrivateKeyFile := flag.String("ssh_priv_key", "id_rsa", "Path to SSH private key file used by MySQL backend")
 
 	flag.Parse()
 
