@@ -66,7 +66,7 @@ func New(
 	return &Node{
 		config:         c,
 		backend:        backend,
-		done:           make(chan bool),
+		done:           make(chan bool, 1),
 		peerManager:    peerManager,
 		transportMgr:   transportMgr,
 		nodeInfo:       params.AddrPort,

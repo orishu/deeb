@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
 	"github.com/etcd-io/etcd/raft"
+	"github.com/orishu/deeb/internal/backend/mysql"
 	"github.com/orishu/deeb/internal/backend/sqlite"
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
@@ -29,11 +31,44 @@ func main() {
 	gatewayPort := flag.String("gwport", "11000", "The gRPC-Gateway server port")
 	nodeID := flag.Uint64("id", 1, "The node ID")
 	peerStr := flag.String("peers", "", "Comma-separated list of addr:port potential raft peers")
-	dbdir := flag.String("sqlitedir", "./db", "directory for the sqlite files")
-
-	_ = os.Mkdir(*dbdir, 0755)
+	backend := flag.String("backend", "mysql", "Backend type: 'mysql' or 'sqlite'")
+	sqliteDBDir := flag.String("sqlitedir", "./db", "directory for the sqlite files")
+	sshPrivateKeyFile := flag.String("ssh_priv_key", "/var/secrets/id_rsa", "Path to SSH private key file used by MySQL backend")
 
 	flag.Parse()
+
+	var backendProvides fx.Option
+	if *backend == "sqlite" {
+		_ = os.Mkdir(*sqliteDBDir, 0755)
+		backendProvides = fx.Provide(
+			func() sqlite.Params {
+				return sqlite.Params{
+					DBDir:           *sqliteDBDir,
+					EntriesToRetain: 5,
+				}
+			},
+			sqlite.New,
+		)
+	}
+	if *backend == "mysql" {
+		sshPrivateKey, err := ioutil.ReadFile(*sshPrivateKeyFile)
+		if err != nil {
+			panic(err)
+		}
+		backendProvides = fx.Provide(
+			func() mysql.Params {
+				return mysql.Params{
+					Addr:            "localhost",
+					MysqlPort:       3306,
+					SSHPort:         22,
+					PrivateKey:      sshPrivateKey,
+					EntriesToRetain: 5,
+				}
+			},
+			mysql.New,
+		)
+	}
+
 	peers := parsePeers(*peerStr)
 
 	provides := fx.Provide(
@@ -52,17 +87,10 @@ func main() {
 				GatewayPort: *gatewayPort,
 			}
 		},
-		func() sqlite.Params {
-			return sqlite.Params{
-				DBDir:           *dbdir,
-				EntriesToRetain: 5,
-			}
-		},
 		nd.New,
 		server.New,
 		transport.NewPeerManager,
 		transport.NewTransportManager,
-		sqlite.New,
 		func() transport.ClientFactory { return transport.NewGRPCClient },
 		lib.NewDevelopmentLogger,
 		lib.NewLoggerAdapter,
@@ -90,7 +118,7 @@ func main() {
 		})
 	}
 
-	app := fx.New(provides, fx.Invoke(invoke))
+	app := fx.New(provides, backendProvides, fx.Invoke(invoke))
 	ctx := context.Background()
 	err := app.Start(ctx)
 	if err != nil {
