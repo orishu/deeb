@@ -184,6 +184,11 @@ func (n *Node) GetID() uint64 {
 	return n.config.ID
 }
 
+// RaftStatus returns the Raft status
+func (n *Node) RaftStatus() raft.Status {
+	return n.raftNode.Status()
+}
+
 // WriteQuery proposes a write query to the Raft data and synchronuously
 // waits for the data to be committed.
 func (n *Node) WriteQuery(ctx context.Context, sql string) error {

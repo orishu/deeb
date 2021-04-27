@@ -107,6 +107,10 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	require.Equal(t, 5, count)
 	require.False(t, rows.Next())
 
+	status := nodes[0].RaftStatus()
+	require.Equal(t, uint64(100), status.ID)
+	require.Equal(t, uint64(101), status.SoftState.Lead)
+
 	require.Equal(t, uint64(100), nodes[0].GetID())
 	nodes[2].Stop(ctx)
 	nodes[1].Stop(ctx)
