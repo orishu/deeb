@@ -144,6 +144,9 @@ func (n *Node) runMainLoop(ctx context.Context) {
 			snapHandle := n.saveSnapshotIfNotEmpty(ctx, rd.Snapshot)
 			n.sendMessages(ctx, rd.Messages)
 			n.applySnapshotIfNotEmpty(ctx, rd.Snapshot, snapHandle)
+			// TODO: after applying the snapshot, get the stored
+			// index from the backend and avoid processing entries
+			// with smaller indexes.
 			for _, entry := range rd.CommittedEntries {
 				if entry.Type == raftpb.EntryNormal && len(entry.Data) > 0 {
 					n.processCommittedData(ctx, entry)

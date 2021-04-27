@@ -131,6 +131,11 @@ func (k *KubeHelper) EnsureStatefulSet(ctx context.Context, ssetName string, sse
 	return nil
 }
 
+func (k *KubeHelper) DeleteStatefulSet(ctx context.Context, ssetName string) error {
+	ssets := k.kube.AppsV1().StatefulSets(k.namespace)
+	return ssets.Delete(ctx, ssetName, metav1.DeleteOptions{})
+}
+
 func (k *KubeHelper) WaitForPodToBeReady(ctx context.Context, podName string, attempts int) error {
 	pods := k.kube.CoreV1().Pods(k.namespace)
 	for attempts > 0 {

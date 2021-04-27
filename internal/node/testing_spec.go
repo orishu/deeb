@@ -1,16 +1,14 @@
-package mysql
+package node
 
 var statefulSetSpec string = `
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations:
-    unit-testing: test_name
+  name: t1-deeb
+  namespace: test
   labels:
     app.kubernetes.io/instance: t1
     app.kubernetes.io/name: deeb
-  name: t1-deeb
-  namespace: test
 spec:
   podManagementPolicy: OrderedReady
   replicas: 1
@@ -64,8 +62,6 @@ spec:
           requests:
             cpu: 100m
             memory: 256Mi
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /var/lib/mysql
           name: data
@@ -83,8 +79,6 @@ spec:
           requests:
             cpu: 50m
             memory: 128Mi
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /var/lib/mysql
           name: data
@@ -102,40 +96,35 @@ spec:
         image: busybox:1.25.0
         imagePullPolicy: IfNotPresent
         name: remove-lost-found
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
+        resources:
+          limits:
+            cpu: 25m
+            memory: 128Mi
+          requests:
+            cpu: 25m
+            memory: 128Mi
         volumeMounts:
         - mountPath: /var/lib/mysql
           name: data
       restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
       terminationGracePeriodSeconds: 30
       volumes:
-      - configMap:
-          defaultMode: 420
+      - name: configurations
+        configMap:
           name: t1-deeb-configuration
-        name: configurations
       - name: ssh-keys
         secret:
-          defaultMode: 420
           items:
           - key: id_rsa
-            mode: 256
+            mode: 0400
             path: id_rsa
           - key: id_rsa.pub
             path: id_rsa.pub
           secretName: my-ssh-key
-  updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
-      creationTimestamp: null
       labels:
         app.kubernetes.io/instance: t1
         app.kubernetes.io/name: deeb

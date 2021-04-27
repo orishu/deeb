@@ -11,6 +11,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
+	internaltesting "github.com/orishu/deeb/internal/lib/testing"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 )
@@ -22,9 +23,9 @@ func Test_basic_mysql_access(t *testing.T) {
 	kubeHelper, err := lib.NewKubeHelper("test", logger)
 	require.NoError(t, err)
 
-	err = kubeHelper.EnsureSecret(ctx, "my-ssh-key", sshSecretSpec)
+	err = kubeHelper.EnsureSecret(ctx, "my-ssh-key", internaltesting.SSHSecretSpec)
 	require.NoError(t, err)
-	err = kubeHelper.EnsureConfigMap(ctx, "t1-deeb-configuration", configMapSpec)
+	err = kubeHelper.EnsureConfigMap(ctx, "t1-deeb-configuration", internaltesting.ConfigMapSpec)
 	require.NoError(t, err)
 	err = kubeHelper.EnsureStatefulSet(ctx, "t1-deeb", statefulSetSpec)
 	require.NoError(t, err)
@@ -47,7 +48,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.NoError(t, err)
 	defer portForwardCloser2()
 
-	privKey, err := lib.ExtractBytesFromSecretYAML(sshSecretSpec, "id_rsa")
+	privKey, err := lib.ExtractBytesFromSecretYAML(internaltesting.SSHSecretSpec, "id_rsa")
 	require.NoError(t, err)
 
 	b, st := New(Params{
