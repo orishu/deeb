@@ -97,6 +97,84 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
+	// Propose some more data
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO testdb.table1 (f1, f2) VALUES (40, "forty")`)
+	require.NoError(t, err)
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO testdb.table1 (f1, f2) VALUES (50, "fifty")`)
+	require.NoError(t, err)
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO testdb.table1 (f1, f2) VALUES (60, "sixty")`)
+	require.NoError(t, err)
+
+	// Stop and delete the data from Node 2, have a new MySQL pod come up
+	// and see a new node start with a snapshot.
+	nodes[2].Stop()
+	time.Sleep(2 * time.Second)
+	node2SSHPort := nodes[2].backend.(*mysql.Backend).SSHPort()
+	session, _, err := lib.MakeSSHSession("localhost", node2SSHPort, "mysql", privKey)
+	require.NoError(t, err)
+	err = session.Run("rm -rf /var/lib/mysql/*")
+	require.NoError(t, err)
+
+	err = kubeHelper.DeletePod(ctx, "t1-deeb-2")
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+	// Wait for pod to be gone
+	err = kubeHelper.WaitForPodToBeGone(ctx, "t1-deeb-2", 120)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Remove the old node from the topology
+	err = nodes[0].RemoveNode(ctx, 102)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Register the new Node 2 (ID=103) with the transport manager
+	inprocessReg.Register(nodes[2].transportMgr, nodeInfos[2].Addr, nodeInfos[2].Port, 103)
+
+	// Add node to topology
+	nodes[0].AddNode(ctx, 103, nodeInfos[2])
+	time.Sleep(2 * time.Second)
+
+	// Wait for pod to be running+ready
+	err = kubeHelper.WaitForPodToBeReady(ctx, "t1-deeb-2", 120)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Start the new Node 2 with ID 103
+	node2Params := NodeParams{
+		NodeID:         103,
+		AddrPort:       nodeInfos[2],
+		PotentialPeers: nodeInfos[:2],
+	}
+	newNode2, closer3 := createMySQLNode(ctx, t, kubeHelper, "t1-deeb-2", privKey, node2Params, inprocessReg, logger)
+	nodes[2] = newNode2
+	defer closer3()
+	err = nodes[2].Start(ctx)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Wait for the new Node 2 to have the new rows that were part of the snapshot
+	attempts := 40
+	for ; attempts > 0; attempts-- {
+		rows, err := nodes[2].ReadQuery(ctx, `SELECT f2 FROM testdb.table1 WHERE f1 = 60`)
+		if err != nil {
+			logger.Warnf("new node2 not yet ready, err=%+v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		if !rows.Next() {
+			logger.Warnf("new node2 not yet ready, data not there yet")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		err = rows.Scan(&value)
+		require.NoError(t, err)
+		require.Equal(t, "sixty", value)
+		require.False(t, rows.Next())
+		time.Sleep(5 * time.Second)
+	}
+	require.NotEqual(t, attempts, 0)
+
 	nodes[0].Stop()
 	nodes[1].Stop()
 	nodes[2].Stop()
@@ -156,7 +234,7 @@ func createMySQLNode(
 	portForwardCloser2, err := kubeHelper.PortForward(podName, sshPort, 22)
 	require.NoError(t, err)
 
-	time.Sleep(8 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	be, st := mysql.New(mysql.Params{
 		EntriesToRetain: 5,
@@ -167,7 +245,15 @@ func createMySQLNode(
 	}, logger)
 
 	peerMgr := transport.NewPeerManager(transportMgr)
-	err = be.Start(ctx)
+	attempts := 80
+	for ; attempts > 0; attempts-- {
+		err = be.Start(ctx)
+		if err == nil {
+			break
+		}
+		logger.Warnf("backend not up yet, error: %+v", err)
+		time.Sleep(5 * time.Second)
+	}
 	require.NoError(t, err)
 	closer := func() {
 		be.Stop(ctx)

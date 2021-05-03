@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"math"
+	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/etcd-io/etcd/raft"
@@ -103,7 +104,18 @@ func (b *Backend) Term(i uint64) (uint64, error) {
 func (b *Backend) LastIndex() (uint64, error) {
 	ctx := context.Background()
 	query := `SELECT ifnull(max(idx),0) FROM entries`
-	return queryInteger(ctx, b.raftdb, query)
+
+	// Currently, the Raft implementation panics if LastIndex fails, so it
+	// need to try until it succeeds. If MySQL is down, it will fail, but
+	// hopefully MySQL will come up at some point.
+	for {
+		idx, err := queryInteger(ctx, b.raftdb, query)
+		if err == nil {
+			return idx, nil
+		}
+		b.logger.Warnf("failed getting last index, error: %+v", err)
+		time.Sleep(2 * time.Second)
+	}
 }
 
 // FirstIndex returns the index of the first log entry that is
@@ -112,7 +124,17 @@ func (b *Backend) LastIndex() (uint64, error) {
 func (b *Backend) FirstIndex() (uint64, error) {
 	ctx := context.Background()
 	query := `SELECT ifnull(min(idx),1) FROM entries`
-	return queryInteger(ctx, b.raftdb, query)
+	// Currently, the Raft implementation panics if FirstIndex fails, so it
+	// need to try until it succeeds. If MySQL is down, it will fail, but
+	// hopefully MySQL will come up at some point.
+	for {
+		idx, err := queryInteger(ctx, b.raftdb, query)
+		if err == nil {
+			return idx, nil
+		}
+		b.logger.Warnf("failed getting first index, error: %+v", err)
+		time.Sleep(2 * time.Second)
+	}
 }
 
 // Snapshot returns not the actual snapshot, but a reference to how to fetch a

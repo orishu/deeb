@@ -114,6 +114,11 @@ func (k *KubeHelper) EnsurePod(ctx context.Context, podName string, podYAML stri
 	return nil
 }
 
+func (k *KubeHelper) DeletePod(ctx context.Context, podName string) error {
+	pods := k.kube.CoreV1().Pods(k.namespace)
+	return pods.Delete(ctx, podName, metav1.DeleteOptions{})
+}
+
 func (k *KubeHelper) EnsureStatefulSet(ctx context.Context, ssetName string, ssetYAML string) error {
 	ssets := k.kube.AppsV1().StatefulSets(k.namespace)
 	sset, err := ssets.Get(ctx, ssetName, metav1.GetOptions{})
@@ -137,13 +142,17 @@ func (k *KubeHelper) DeleteStatefulSet(ctx context.Context, ssetName string) err
 	return ssets.Delete(ctx, ssetName, metav1.DeleteOptions{})
 }
 
+func (k *KubeHelper) DeletePeristentVolumeClaim(ctx context.Context, pvcName string) error {
+	pvcs := k.kube.CoreV1().PersistentVolumeClaims(k.namespace)
+	return pvcs.Delete(ctx, pvcName, metav1.DeleteOptions{})
+}
+
 func (k *KubeHelper) DeletePeristentVolumeClaims(ctx context.Context, instance string, ssetName string) error {
 	pvcs := k.kube.CoreV1().PersistentVolumeClaims(k.namespace)
 	listOpts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s,app.kubernetes.io/name=%s", instance, ssetName),
 	}
-	err := pvcs.DeleteCollection(ctx, metav1.DeleteOptions{}, listOpts)
-	return err
+	return pvcs.DeleteCollection(ctx, metav1.DeleteOptions{}, listOpts)
 }
 
 func (k *KubeHelper) WaitForPodToBeReady(ctx context.Context, podName string, attempts int) error {
@@ -170,6 +179,24 @@ func (k *KubeHelper) WaitForPodToBeReady(ctx context.Context, podName string, at
 		attempts -= 1
 	}
 	return nil
+}
+
+func (k *KubeHelper) WaitForPodToBeGone(ctx context.Context, podName string, attempts int) error {
+	pods := k.kube.CoreV1().Pods(k.namespace)
+	for attempts > 0 {
+		pod, err := pods.Get(ctx, podName, metav1.GetOptions{})
+		if err != nil {
+			k.logger.Infof("pod %s now returns error: %+v", podName, err)
+		} else {
+			k.logger.Infof("Waiting for pod %s to be gone. Phase: %s", podName, pod.Status.Phase)
+			if pod.Status.Phase != "Terminating" {
+				return nil
+			}
+		}
+		time.Sleep(time.Second)
+		attempts -= 1
+	}
+	return errors.New("ran out of attempts")
 }
 
 func (k *KubeHelper) PortForward(

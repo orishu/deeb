@@ -18,18 +18,19 @@ import (
 
 // Node is the object encapsulating the Raft node.
 type Node struct {
-	config         raft.Config
-	raftNode       raft.Node
-	backend        backend.DBBackend
-	done           chan bool
-	doneProcessed  chan bool
-	peerManager    *transport.PeerManager
-	transportMgr   *transport.TransportManager
-	nodeInfo       NodeInfo
-	potentialPeers []NodeInfo
-	isNewCluster   bool
-	logger         *zap.SugaredLogger
-	pendingWrites  *lib.ChannelPool
+	config                    raft.Config
+	raftNode                  raft.Node
+	backend                   backend.DBBackend
+	done                      chan bool
+	doneProcessed             chan bool
+	peerManager               *transport.PeerManager
+	transportMgr              *transport.TransportManager
+	nodeInfo                  NodeInfo
+	potentialPeers            []NodeInfo
+	isNewCluster              bool
+	indexAfterAppliedSnapshot uint64
+	logger                    *zap.SugaredLogger
+	pendingWrites             *lib.ChannelPool
 }
 
 // NodeInfo groups the node's metadata outside of its Raft configuration
@@ -146,10 +147,11 @@ func (n *Node) runMainLoop(ctx context.Context) {
 			snapHandle := n.saveSnapshotIfNotEmpty(ctx, rd.Snapshot)
 			n.sendMessages(ctx, rd.Messages)
 			n.applySnapshotIfNotEmpty(ctx, rd.Snapshot, snapHandle)
-			// TODO: after applying the snapshot, get the stored
-			// index from the backend and avoid processing entries
-			// with smaller indexes.
 			for _, entry := range rd.CommittedEntries {
+				if entry.Index <= n.indexAfterAppliedSnapshot {
+					n.logger.Infof("skipping index %d, latest snapshot had higher index applied, %d", entry.Index, n.indexAfterAppliedSnapshot)
+					continue
+				}
 				if entry.Type == raftpb.EntryNormal && len(entry.Data) > 0 {
 					n.processCommittedData(ctx, entry)
 				}
@@ -298,6 +300,12 @@ func (n *Node) applySnapshotIfNotEmpty(ctx context.Context, snap raftpb.Snapshot
 		n.logger.Errorf("failed applying snapshot: %+v", err)
 		panic(err)
 	}
+	applied, err := n.backend.GetAppliedIndex(ctx)
+	if err != nil {
+		n.indexAfterAppliedSnapshot = 0
+		panic(errors.Wrap(err, "getting applied index after applying snapshot"))
+	}
+	n.indexAfterAppliedSnapshot = applied
 	if snapHandle != 0 {
 		err = n.backend.RemoveSavedSnapshot(ctx, snapHandle)
 		if err != nil {

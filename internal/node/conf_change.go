@@ -40,3 +40,13 @@ func (n *Node) UpdateNode(ctx context.Context, nodeID uint64, nodeInfo NodeInfo)
 	}
 	return n.raftNode.ProposeConfChange(ctx, cc)
 }
+
+// RemoveNode removes an existing member.
+func (n *Node) RemoveNode(ctx context.Context, nodeID uint64) error {
+	cc := raftpb.ConfChange{
+		ID:     nodeID,
+		Type:   raftpb.ConfChangeRemoveNode,
+		NodeID: nodeID,
+	}
+	return n.raftNode.ProposeConfChange(ctx, cc)
+}

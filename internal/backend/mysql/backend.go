@@ -411,6 +411,10 @@ func (b *Backend) QuerySQL(ctx context.Context, sql string) (*sql.Rows, error) {
 	return b.maindb.QueryContext(ctx, sql)
 }
 
+func (b *Backend) SSHPort() int {
+	return b.sshPort
+}
+
 func (b *Backend) waitForDatabaseToComeUp(ctx context.Context, attempts int) error {
 	var err error
 	for i := 0; i < attempts; i++ {
