@@ -28,7 +28,10 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 	require.NoError(t, err)
 	err = kubeHelper.EnsureStatefulSet(ctx, "t1-deeb", statefulSetSpec)
 	require.NoError(t, err)
-	defer kubeHelper.DeleteStatefulSet(ctx, "t1-deeb")
+	defer func() {
+		kubeHelper.DeleteStatefulSet(ctx, "t1-deeb")
+		kubeHelper.DeletePeristentVolumeClaims(ctx, "t1", "deeb")
+	}()
 
 	privKey, err := lib.ExtractBytesFromSecretYAML(internaltesting.SSHSecretSpec, "id_rsa")
 	require.NoError(t, err)
@@ -45,6 +48,29 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 
 	err = nodes[0].Start(ctx)
 	require.NoError(t, err)
+	defer nodes[0].Stop()
+
+	time.Sleep(1 * time.Second)
+	nodes[0].AddNode(ctx, 101, nodeInfos[1])
+
+	err = nodes[1].Start(ctx)
+	require.NoError(t, err)
+	defer nodes[1].Stop()
+
+	time.Sleep(1 * time.Second)
+	nodes[1].AddNode(ctx, 102, nodeInfos[2])
+
+	err = nodes[2].Start(ctx)
+	require.NoError(t, err)
+	defer nodes[2].Stop()
+	time.Sleep(1 * time.Second)
+
+	err = nodes[1].WriteQuery(ctx, "CREATE TABLE testdb.table1 (f1 INT, f2 TEXT)")
+	require.NoError(t, err)
+	time.Sleep(100 * time.Millisecond)
+	err = nodes[1].WriteQuery(ctx, `INSERT INTO testdb.table1 (f1, f2) VALUES (10, "ten"), (20, "twenty")`)
+	require.NoError(t, err)
+	time.Sleep(1 * time.Second)
 }
 
 func createMySQLNodes(
@@ -62,7 +88,7 @@ func createMySQLNodes(
 		podName := fmt.Sprintf("t1-deeb-%d", i)
 		err := kubeHelper.WaitForPodToBeReady(ctx, podName, 30)
 		require.NoError(t, err)
-		time.Sleep(time.Second)
+		time.Sleep(2 * time.Second)
 
 		n, closer := createMySQLNode(ctx, t, kubeHelper, podName, privKey, np, inprocessReg, logger)
 		nodes = append(nodes, n)
@@ -98,6 +124,8 @@ func createMySQLNode(
 	require.NoError(t, err)
 	portForwardCloser2, err := kubeHelper.PortForward(podName, sshPort, 22)
 	require.NoError(t, err)
+
+	time.Sleep(8 * time.Second)
 
 	be, st := mysql.New(mysql.Params{
 		EntriesToRetain: 5,

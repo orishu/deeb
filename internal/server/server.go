@@ -152,7 +152,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Stop stops the combined gRPC HTTP server
 func (s *Server) Stop(ctx context.Context) error {
-	s.node.Stop(ctx)
+	s.node.Stop()
 	err := s.httpServer.Shutdown(ctx)
 	if err != nil {
 		return err

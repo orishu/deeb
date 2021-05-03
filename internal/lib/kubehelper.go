@@ -2,6 +2,7 @@ package lib
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -134,6 +135,15 @@ func (k *KubeHelper) EnsureStatefulSet(ctx context.Context, ssetName string, sse
 func (k *KubeHelper) DeleteStatefulSet(ctx context.Context, ssetName string) error {
 	ssets := k.kube.AppsV1().StatefulSets(k.namespace)
 	return ssets.Delete(ctx, ssetName, metav1.DeleteOptions{})
+}
+
+func (k *KubeHelper) DeletePeristentVolumeClaims(ctx context.Context, instance string, ssetName string) error {
+	pvcs := k.kube.CoreV1().PersistentVolumeClaims(k.namespace)
+	listOpts := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s,app.kubernetes.io/name=%s", instance, ssetName),
+	}
+	err := pvcs.DeleteCollection(ctx, metav1.DeleteOptions{}, listOpts)
+	return err
 }
 
 func (k *KubeHelper) WaitForPodToBeReady(ctx context.Context, podName string, attempts int) error {

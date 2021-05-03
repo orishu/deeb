@@ -22,6 +22,7 @@ type Node struct {
 	raftNode       raft.Node
 	backend        backend.DBBackend
 	done           chan bool
+	doneProcessed  chan bool
 	peerManager    *transport.PeerManager
 	transportMgr   *transport.TransportManager
 	nodeInfo       NodeInfo
@@ -67,6 +68,7 @@ func New(
 		config:         c,
 		backend:        backend,
 		done:           make(chan bool, 1),
+		doneProcessed:  make(chan bool, 1),
 		peerManager:    peerManager,
 		transportMgr:   transportMgr,
 		nodeInfo:       params.AddrPort,
@@ -175,11 +177,13 @@ func (n *Node) runMainLoop(ctx context.Context) {
 	n.transportMgr.UnregisterDestCallback(n.config.ID)
 	n.raftNode.Stop()
 	n.backend.Stop(ctx)
+	n.doneProcessed <- true
 }
 
 // Stop stops the main Raft loop
-func (n *Node) Stop(ctx context.Context) {
+func (n *Node) Stop() {
 	n.done <- true
+	_ = <-n.doneProcessed
 }
 
 // GetID returns the node ID

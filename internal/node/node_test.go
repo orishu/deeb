@@ -56,7 +56,7 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Stop node0
-	nodes[0].Stop(ctx)
+	nodes[0].Stop()
 	time.Sleep(2 * time.Second)
 
 	// Propose data while node0 is down
@@ -112,9 +112,9 @@ func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	require.Equal(t, uint64(101), status.SoftState.Lead)
 
 	require.Equal(t, uint64(100), nodes[0].GetID())
-	nodes[2].Stop(ctx)
-	nodes[1].Stop(ctx)
-	nodes[0].Stop(ctx)
+	nodes[2].Stop()
+	nodes[1].Stop()
+	nodes[0].Stop()
 }
 
 func createNodeParams(nodeInfos []NodeInfo) []NodeParams {

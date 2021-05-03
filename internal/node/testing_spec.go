@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/name: deeb
 spec:
   podManagementPolicy: OrderedReady
-  replicas: 1
+  replicas: 3
   revisionHistoryLimit: 3
   selector:
     matchLabels:
