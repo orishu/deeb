@@ -48,21 +48,18 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 
 	err = nodes[0].Start(ctx)
 	require.NoError(t, err)
-	defer nodes[0].Stop()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	nodes[0].AddNode(ctx, 101, nodeInfos[1])
 
 	err = nodes[1].Start(ctx)
 	require.NoError(t, err)
-	defer nodes[1].Stop()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	nodes[1].AddNode(ctx, 102, nodeInfos[2])
 
 	err = nodes[2].Start(ctx)
 	require.NoError(t, err)
-	defer nodes[2].Stop()
 	time.Sleep(1 * time.Second)
 
 	err = nodes[1].WriteQuery(ctx, "CREATE TABLE testdb.table1 (f1 INT, f2 TEXT)")
@@ -70,7 +67,41 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	err = nodes[1].WriteQuery(ctx, `INSERT INTO testdb.table1 (f1, f2) VALUES (10, "ten"), (20, "twenty")`)
 	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Stop node0
+	nodes[0].Stop()
+	time.Sleep(2 * time.Second)
+
+	// Propose data while node0 is down
+	err = nodes[2].WriteQuery(ctx, `INSERT INTO testdb.table1 (f1, f2) VALUES (30, "thirty")`)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Restart node0
+	newNode0, closer2 := createMySQLNode(ctx, t, kubeHelper, "t1-deeb-0", privKey, NodeParams{NodeID: 100, AddrPort: nodeInfos[0]}, inprocessReg, logger)
+	nodes[0] = newNode0
+	defer closer2()
+	err = nodes[0].Restart(ctx)
+	require.NoError(t, err)
+	time.Sleep(2 * time.Second)
+
+	// Check that node0 got the new row that was added while it was down
+	rows, err := nodes[0].ReadQuery(ctx, `SELECT f2 FROM testdb.table1 WHERE f1 = 30`)
+	require.True(t, rows.Next())
+	var value string
+	err = rows.Scan(&value)
+	require.NoError(t, err)
+	require.Equal(t, "thirty", value)
+	require.False(t, rows.Next())
+
 	time.Sleep(1 * time.Second)
+
+	nodes[0].Stop()
+	nodes[1].Stop()
+	nodes[2].Stop()
+
+	time.Sleep(2 * time.Second)
 }
 
 func createMySQLNodes(
