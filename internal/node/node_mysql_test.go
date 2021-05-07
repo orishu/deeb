@@ -154,7 +154,7 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Wait for the new Node 2 to have the new rows that were part of the snapshot
-	attempts := 40
+	attempts := 100
 	for ; attempts > 0; attempts-- {
 		rows, err := nodes[2].ReadQuery(ctx, `SELECT f2 FROM testdb.table1 WHERE f1 = 60`)
 		if err != nil {
@@ -171,7 +171,7 @@ func Test_mysql_cluster_with_in_process_transport(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "sixty", value)
 		require.False(t, rows.Next())
-		time.Sleep(5 * time.Second)
+		break
 	}
 	require.NotEqual(t, attempts, 0)
 
@@ -195,7 +195,7 @@ func createMySQLNodes(
 	closers := make([]func(), 0, len(nodeParams))
 	for i, np := range nodeParams {
 		podName := fmt.Sprintf("t1-deeb-%d", i)
-		err := kubeHelper.WaitForPodToBeReady(ctx, podName, 30)
+		err := kubeHelper.WaitForPodToBeReady(ctx, podName, 60)
 		require.NoError(t, err)
 		time.Sleep(2 * time.Second)
 

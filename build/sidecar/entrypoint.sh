@@ -5,4 +5,6 @@ cp /var/secrets/id_rsa.pub /home/mysql/.ssh/authorized_keys
 cp /var/secrets/id_rsa /home/mysql/.ssh/id_rsa
 chown mysql:mysql /home/mysql/.ssh/*
 
+rm -f /run/nologin
+
 exec /usr/sbin/sshd  -e -D
