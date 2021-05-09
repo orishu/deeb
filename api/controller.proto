@@ -67,6 +67,11 @@ service Raft {
 			get: "/api/v1/raft/id"
 		};
 	}
+	rpc HighestID(google.protobuf.Empty) returns (HighestIDResponse) {
+		option (google.api.http) = {
+			get: "/api/v1/raft/highest_id"
+		};
+	}
 }
 
 enum StatusCode {
@@ -85,6 +90,10 @@ message AddPeerRequest {
 };
 
 message GetIDResponse {
+    	uint64 id = 1;
+}
+
+message HighestIDResponse {
     	uint64 id = 1;
 }
 

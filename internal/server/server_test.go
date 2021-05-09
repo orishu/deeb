@@ -94,6 +94,9 @@ func Test_basic_server_operation(t *testing.T) {
 	id, err := client.GetRemoteID(ctx)
 	require.NoError(t, err)
 	require.Equal(t, uint64(123), id)
+	id, err = client.GetHighestID(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(123), id)
 
 	svcClient, closer, err := makeServiceClient(ctx, grpcPort)
 	defer closer()

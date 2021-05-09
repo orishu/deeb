@@ -8,12 +8,12 @@ import (
 	math "math"
 	proto "github.com/gogo/protobuf/proto"
 	golang_proto "github.com/golang/protobuf/proto"
-	_ "github.com/mwitkow/go-proto-validators"
-	_ "github.com/coreos/etcd/raft/raftpb"
-	_ "github.com/gogo/protobuf/types"
 	_ "github.com/gogo/googleapis/google/api"
 	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger/options"
 	_ "github.com/gogo/protobuf/gogoproto"
+	_ "github.com/mwitkow/go-proto-validators"
+	_ "github.com/coreos/etcd/raft/raftpb"
+	_ "github.com/gogo/protobuf/types"
 	github_com_mwitkow_go_proto_validators "github.com/mwitkow/go-proto-validators"
 )
 
@@ -30,6 +30,9 @@ func (this *AddPeerRequest) Validate() error {
 	return nil
 }
 func (this *GetIDResponse) Validate() error {
+	return nil
+}
+func (this *HighestIDResponse) Validate() error {
 	return nil
 }
 func (this *WriteQuery) Validate() error {

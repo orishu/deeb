@@ -117,6 +117,28 @@
         ]
       }
     },
+    "/api/v1/raft/highest_id": {
+      "get": {
+        "operationId": "Raft_HighestID",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiHighestIDResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "tags": [
+          "Raft"
+        ]
+      }
+    },
     "/api/v1/raft/id": {
       "get": {
         "operationId": "Raft_GetID",
@@ -219,6 +241,15 @@
       }
     },
     "apiGetIDResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "apiHighestIDResponse": {
       "type": "object",
       "properties": {
         "id": {

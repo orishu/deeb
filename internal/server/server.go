@@ -56,7 +56,7 @@ func New(
 
 	cservice := controlService{node: node}
 	pb.RegisterControlServiceServer(grpcServer, &cservice)
-	rservice := raftService{nodeID: node.GetID(), transportMgr: transportMgr}
+	rservice := raftService{node: node, transportMgr: transportMgr}
 	pb.RegisterRaftServer(grpcServer, &rservice)
 
 	mux := http.NewServeMux()

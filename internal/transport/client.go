@@ -17,6 +17,7 @@ import (
 type Client interface {
 	SendRaftMessage(ctx context.Context, msg *raftpb.Message) error
 	GetRemoteID(ctx context.Context) (uint64, error)
+	GetHighestID(ctx context.Context) (uint64, error)
 	Close() error
 }
 
@@ -47,6 +48,16 @@ func (c *GRPCClient) SendRaftMessage(ctx context.Context, msg *raftpb.Message) e
 // GetRemoteID fetches the node ID of the remote node.
 func (c *GRPCClient) GetRemoteID(ctx context.Context) (uint64, error) {
 	resp, err := c.raftClient.GetID(ctx, &types.Empty{})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Id, nil
+}
+
+// GetHighestID fetches the highest ID recorded by the remote node if the node
+// is the leader.
+func (c *GRPCClient) GetHighestID(ctx context.Context) (uint64, error) {
+	resp, err := c.raftClient.HighestID(ctx, &types.Empty{})
 	if err != nil {
 		return 0, err
 	}

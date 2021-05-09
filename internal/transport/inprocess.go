@@ -60,6 +60,17 @@ func (ic *InProcessClient) GetRemoteID(ctx context.Context) (uint64, error) {
 	return nodeID, nil
 }
 
+// GetHighestID is part of the Client implementation.
+func (ic *InProcessClient) GetHighestID(ctx context.Context) (uint64, error) {
+	var maxID uint64
+	for _, nodeID := range ic.registry.addrportToNodeID {
+		if nodeID > maxID {
+			maxID = nodeID
+		}
+	}
+	return maxID, nil
+}
+
 // Close is part of the Client implementation.
 func (ic *InProcessClient) Close() error {
 	return nil
