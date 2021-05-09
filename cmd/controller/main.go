@@ -34,6 +34,7 @@ func main() {
 	backend := flag.String("backend", "mysql", "Backend type: 'mysql' or 'sqlite'")
 	sqliteDBDir := flag.String("sqlitedir", "./db", "directory for the sqlite files")
 	sshPrivateKeyFile := flag.String("ssh_priv_key", "id_rsa", "Path to SSH private key file used by MySQL backend")
+	retention := flag.Uint64("retention", 1000, "Number of Raft entries to retain")
 
 	flag.Parse()
 
@@ -44,7 +45,7 @@ func main() {
 			func() sqlite.Params {
 				return sqlite.Params{
 					DBDir:           *sqliteDBDir,
-					EntriesToRetain: 5,
+					EntriesToRetain: *retention,
 				}
 			},
 			sqlite.New,
@@ -62,7 +63,7 @@ func main() {
 					MysqlPort:       3306,
 					SSHPort:         22,
 					PrivateKey:      sshPrivateKey,
-					EntriesToRetain: 5,
+					EntriesToRetain: *retention,
 				}
 			},
 			mysql.New,
