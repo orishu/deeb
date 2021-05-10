@@ -18,6 +18,7 @@ type Client interface {
 	SendRaftMessage(ctx context.Context, msg *raftpb.Message) error
 	GetRemoteID(ctx context.Context) (uint64, error)
 	GetHighestID(ctx context.Context) (uint64, error)
+	AddNewPeer(ctx context.Context, nodeID uint64, addr string, port string) error
 	Close() error
 }
 
@@ -25,6 +26,7 @@ type Client interface {
 type GRPCClient struct {
 	conn       *grpc.ClientConn
 	raftClient pb.RaftClient
+	ctrlClient pb.ControlServiceClient
 }
 
 // NewGRPCClient creates a gRPC client
@@ -36,7 +38,12 @@ func NewGRPCClient(ctx context.Context, addr string, port string) (Client, error
 		return nil, errors.Wrapf(err, "grpc dial error %s:%s", addr, port)
 	}
 	raftClient := pb.NewRaftClient(conn)
-	return &GRPCClient{conn: conn, raftClient: raftClient}, nil
+	ctrlClient := pb.NewControlServiceClient(conn)
+	return &GRPCClient{
+		conn:       conn,
+		raftClient: raftClient,
+		ctrlClient: ctrlClient,
+	}, nil
 }
 
 // SendRaftMessage sends a Raft message through the Raft client.
@@ -62,6 +69,16 @@ func (c *GRPCClient) GetHighestID(ctx context.Context) (uint64, error) {
 		return 0, err
 	}
 	return resp.Id, nil
+}
+
+// AddNewPeer tells the remote node about a new joining node
+func (c *GRPCClient) AddNewPeer(ctx context.Context, nodeID uint64, addr string, port string) error {
+	_, err := c.ctrlClient.AddPeer(ctx, &pb.AddPeerRequest{
+		Id:   nodeID,
+		Addr: addr,
+		Port: port,
+	})
+	return err
 }
 
 // Close closes the gRPC connection

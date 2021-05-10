@@ -13,6 +13,7 @@ import (
 	"github.com/etcd-io/etcd/raft"
 	"github.com/orishu/deeb/internal/backend/mysql"
 	"github.com/orishu/deeb/internal/backend/sqlite"
+	"github.com/orishu/deeb/internal/bootstrap"
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
@@ -25,6 +26,7 @@ import (
 )
 
 func main() {
+	doBootstrap := flag.Bool("bootstrap", false, "Derive node ID, peers, isNewCluster from running environment")
 	isNewCluster := flag.Bool("n", false, "Start up a new cluster")
 	host := flag.String("host", "localhost", "The address to bind to")
 	gRPCPort := flag.String("port", "10000", "The gRPC server port")
@@ -70,15 +72,37 @@ func main() {
 		)
 	}
 
-	peers := parsePeers(*peerStr)
+	var bootstrapProvide fx.Option
+	if *doBootstrap {
+		bootstrapProvide = fx.Provide(
+			func(ctx context.Context, p bootstrap.Params) bootstrap.BootstrapInfo {
+				bsi, err := bootstrap.New(ctx, p)
+				if err != nil {
+					panic(err)
+				}
+				return bsi
+			},
+			func() bootstrap.GRPCPortType { return bootstrap.GRPCPortType(*gRPCPort) },
+			bootstrap.NewEnvParams,
+		)
+	} else {
+		bootstrapProvide = fx.Provide(func() bootstrap.BootstrapInfo {
+			return bootstrap.BootstrapInfo{
+				NodeID:       *nodeID,
+				IsNewCluster: *isNewCluster,
+				NodeName:     *host,
+				Peers:        parsePeers(*peerStr),
+			}
+		})
+	}
 
 	provides := fx.Provide(
-		func() nd.NodeParams {
+		func(bsi bootstrap.BootstrapInfo) nd.NodeParams {
 			return nd.NodeParams{
-				NodeID:         *nodeID,
-				AddrPort:       nd.NodeInfo{Addr: *host, Port: *gRPCPort},
-				IsNewCluster:   *isNewCluster,
-				PotentialPeers: peers,
+				NodeID:         bsi.NodeID,
+				AddrPort:       nd.NodeInfo{Addr: bsi.NodeName, Port: *gRPCPort},
+				IsNewCluster:   bsi.IsNewCluster,
+				PotentialPeers: bsi.Peers,
 			}
 		},
 		func() server.ServerParams {
@@ -119,7 +143,7 @@ func main() {
 		})
 	}
 
-	app := fx.New(provides, backendProvides, fx.Invoke(invoke))
+	app := fx.New(provides, backendProvides, bootstrapProvide, fx.Invoke(invoke))
 	ctx := context.Background()
 	err := app.Start(ctx)
 	if err != nil {

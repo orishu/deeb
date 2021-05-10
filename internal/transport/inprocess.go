@@ -71,6 +71,12 @@ func (ic *InProcessClient) GetHighestID(ctx context.Context) (uint64, error) {
 	return maxID, nil
 }
 
+// AddNewPeer tells the remote node about a new joining node
+func (ic *InProcessClient) AddNewPeer(ctx context.Context, nodeID uint64, addr string, port string) error {
+	ic.registry.addrportToNodeID[fmt.Sprintf("%s:%s", addr, port)] = nodeID
+	return nil
+}
+
 // Close is part of the Client implementation.
 func (ic *InProcessClient) Close() error {
 	return nil
