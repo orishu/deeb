@@ -12,14 +12,11 @@ import (
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/transport"
 	"github.com/pkg/errors"
-	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
 // Params are the parameters required for generating the bootstrap info
 type Params struct {
-	fx.In
-
 	ClusterName            string
 	NodeName               string
 	DirWithNodeIDFile      string
@@ -68,7 +65,7 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 		}
 		err = ioutil.WriteFile(nodeIDFilename, []byte(fmt.Sprintf("%d", nodeID)), 0644)
 		if err != nil {
-			return BootstrapInfo{}, errors.Wrapf(err, "writing node_id file %d", nodeIDFilename)
+			return BootstrapInfo{}, errors.Wrapf(err, "writing node_id file %s", nodeIDFilename)
 		}
 	} else {
 		return BootstrapInfo{}, errors.Wrapf(err, "opening node_id file %s", nodeIDFilename)
@@ -87,15 +84,9 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 }
 
 func getPeers(p *Params) ([]nd.NodeInfo, error) {
-	exp := regexp.MustCompile(`(.*-)([0-9]+)$`)
-	matches := exp.FindStringSubmatch(p.NodeName)
-	if len(matches) != 3 {
-		return nil, errors.New("unable to parse node name: " + p.NodeName)
-	}
-	prefix := matches[1]
-	idx, err := strconv.Atoi(matches[2])
+	prefix, idx, err := nodeNameParts(p.NodeName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "parsing node index: %s", p.NodeName)
+		return nil, err
 	}
 	peers := make([]nd.NodeInfo, 0, p.ClusterSize-1)
 	for i := 0; i < p.ClusterSize; i++ {
@@ -136,9 +127,31 @@ func findNewHighNodeID(ctx context.Context, peers []nd.NodeInfo, params *Params)
 		}
 	}
 	if allErrors {
+		_, nodeIdx, err := nodeNameParts(params.NodeName)
+		if err != nil {
+			params.Logger.Errorf("parsing node name %s, got error: %+v", params.NodeName, err)
+			return 0, nil
+		}
+		if nodeIdx != 0 {
+			params.Logger.Warnf("node index >0 cannot initiate a new cluster, node name %s", params.NodeName)
+			return 0, nil
+		}
 		return 1, nil
 	}
 	return highestNodeID + 1, &activePeer
+}
+
+func nodeNameParts(nodeName string) (string, int, error) {
+	exp := regexp.MustCompile(`(.*-)([0-9]+)$`)
+	matches := exp.FindStringSubmatch(nodeName)
+	if len(matches) != 3 {
+		return "", 0, errors.New("unable to parse node name: " + nodeName)
+	}
+	idx, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return "", 0, errors.Wrapf(err, "parsing node index: %s", nodeName)
+	}
+	return matches[1], idx, nil
 }
 
 // reportNewNode tells one of the active peers to add this node to the topology
