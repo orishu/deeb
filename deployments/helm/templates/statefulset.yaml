@@ -9,7 +9,7 @@ metadata:
 spec:
   serviceName: {{ template "deeb.fullname" . }}
   podManagementPolicy: OrderedReady
-  replicas: 1
+  replicas: {{ .Values.replicas }}
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -127,6 +127,8 @@ spec:
         volumeMounts:
         - mountPath: /var/secrets
           name: ssh-keys
+        - mountPath: /var/lib/mysql
+          name: data
         livenessProbe:
           exec:
             command:

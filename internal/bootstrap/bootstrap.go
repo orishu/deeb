@@ -31,6 +31,7 @@ type BootstrapInfo struct {
 	NodeID       uint64
 	IsNewCluster bool
 	NodeName     string
+	ClusterName  string
 	Peers        []nd.NodeInfo
 }
 
@@ -63,9 +64,11 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 				return BootstrapInfo{}, errors.Wrapf(err, "reporting new node to peer %s:%s", peer.Addr, peer.Port)
 			}
 		}
-		err = ioutil.WriteFile(nodeIDFilename, []byte(fmt.Sprintf("%d", nodeID)), 0644)
-		if err != nil {
-			return BootstrapInfo{}, errors.Wrapf(err, "writing node_id file %s", nodeIDFilename)
+		if nodeID > 0 {
+			err = ioutil.WriteFile(nodeIDFilename, []byte(fmt.Sprintf("%d", nodeID)), 0644)
+			if err != nil {
+				return BootstrapInfo{}, errors.Wrapf(err, "writing node_id file %s", nodeIDFilename)
+			}
 		}
 	} else {
 		return BootstrapInfo{}, errors.Wrapf(err, "opening node_id file %s", nodeIDFilename)
@@ -79,6 +82,7 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 		NodeID:       nodeID,
 		IsNewCluster: nodeID == 1,
 		NodeName:     p.NodeName,
+		ClusterName:  p.ClusterName,
 		Peers:        peers,
 	}, nil
 }
@@ -94,7 +98,7 @@ func getPeers(p *Params) ([]nd.NodeInfo, error) {
 			continue
 		}
 		peers = append(peers, nd.NodeInfo{
-			Addr: fmt.Sprintf("%s%d", prefix, i),
+			Addr: fmt.Sprintf("%s%d.%s", prefix, i, p.ClusterName),
 			Port: p.GRPCPort,
 		})
 	}
@@ -160,7 +164,8 @@ func reportNewNode(ctx context.Context, nodeID uint64, existingNode nd.NodeInfo,
 	if err != nil {
 		return errors.Wrapf(err, "failed GRPC connection to active peer %s:%s", existingNode.Addr, existingNode.Port)
 	}
-	err = client.AddNewPeer(ctx, nodeID, params.NodeName, params.GRPCPort)
+	addr := fmt.Sprintf("%s.%s", params.NodeName, params.ClusterName)
+	err = client.AddNewPeer(ctx, nodeID, addr, params.GRPCPort)
 	if err != nil {
 		return errors.Wrap(err, "adding new peer")
 	}

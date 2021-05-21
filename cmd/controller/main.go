@@ -75,8 +75,8 @@ func main() {
 	var bootstrapProvide fx.Option
 	if *doBootstrap {
 		bootstrapProvide = fx.Provide(
-			func(ctx context.Context, p bootstrap.Params) bootstrap.BootstrapInfo {
-				bsi, err := bootstrap.New(ctx, p)
+			func(p bootstrap.Params) bootstrap.BootstrapInfo {
+				bsi, err := bootstrap.New(context.Background(), p)
 				if err != nil {
 					panic(err)
 				}
