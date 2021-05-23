@@ -40,6 +40,11 @@ func main() {
 
 	flag.Parse()
 
+	sshPrivateKey, err := ioutil.ReadFile(*sshPrivateKeyFile)
+	if err != nil {
+		panic(err)
+	}
+
 	var backendProvides fx.Option
 	if *backend == "sqlite" {
 		_ = os.Mkdir(*sqliteDBDir, 0755)
@@ -54,10 +59,6 @@ func main() {
 		)
 	}
 	if *backend == "mysql" {
-		sshPrivateKey, err := ioutil.ReadFile(*sshPrivateKeyFile)
-		if err != nil {
-			panic(err)
-		}
 		backendProvides = fx.Provide(
 			func() mysql.Params {
 				return mysql.Params{
@@ -84,16 +85,34 @@ func main() {
 			},
 			func() bootstrap.GRPCPortType { return bootstrap.GRPCPortType(*gRPCPort) },
 			bootstrap.NewEnvParams,
+			func(bsp bootstrap.Params) server.ServerParams {
+				return server.ServerParams{
+					Addr:        fmt.Sprintf("%s.%s", bsp.NodeName, bsp.ClusterName),
+					Port:        *gRPCPort,
+					GatewayPort: *gatewayPort,
+					PrivateKey:  sshPrivateKey,
+				}
+			},
 		)
 	} else {
-		bootstrapProvide = fx.Provide(func() bootstrap.BootstrapInfo {
-			return bootstrap.BootstrapInfo{
-				NodeID:       *nodeID,
-				IsNewCluster: *isNewCluster,
-				NodeName:     *host,
-				Peers:        parsePeers(*peerStr),
-			}
-		})
+		bootstrapProvide = fx.Provide(
+			func() bootstrap.BootstrapInfo {
+				return bootstrap.BootstrapInfo{
+					NodeID:       *nodeID,
+					IsNewCluster: *isNewCluster,
+					NodeName:     *host,
+					Peers:        parsePeers(*peerStr),
+				}
+			},
+			func() server.ServerParams {
+				return server.ServerParams{
+					Addr:        *host,
+					Port:        *gRPCPort,
+					GatewayPort: *gatewayPort,
+					PrivateKey:  sshPrivateKey,
+				}
+			},
+		)
 	}
 
 	provides := fx.Provide(
@@ -103,13 +122,6 @@ func main() {
 				AddrPort:       nd.NodeInfo{Addr: bsi.NodeName, Port: *gRPCPort},
 				IsNewCluster:   bsi.IsNewCluster,
 				PotentialPeers: bsi.Peers,
-			}
-		},
-		func() server.ServerParams {
-			return server.ServerParams{
-				Addr:        *host,
-				Port:        *gRPCPort,
-				GatewayPort: *gatewayPort,
 			}
 		},
 		nd.New,
@@ -145,7 +157,7 @@ func main() {
 
 	app := fx.New(provides, backendProvides, bootstrapProvide, fx.Invoke(invoke))
 	ctx := context.Background()
-	err := app.Start(ctx)
+	err = app.Start(ctx)
 	if err != nil {
 		panic(err)
 	}

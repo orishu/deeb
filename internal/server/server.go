@@ -27,6 +27,7 @@ type ServerParams struct {
 	Addr        string
 	Port        string
 	GatewayPort string
+	PrivateKey  []byte
 }
 
 // Server is the gRPC and HTTP server
@@ -48,8 +49,21 @@ func New(
 	transportMgr *transport.TransportManager,
 	logger *zap.SugaredLogger,
 ) *Server {
+	certificates := make([]tls.Certificate, 0, 1)
+	if params.PrivateKey != nil {
+		cert, err := insecure.CreateSelfSignedCertificate(params.PrivateKey, params.Addr)
+		if err != nil {
+			panic(err)
+		}
+		certificates = append(certificates, *cert)
+	}
+	creds := credentials.NewTLS(&tls.Config{
+		ServerName:         params.Addr,
+		Certificates:       certificates,
+		InsecureSkipVerify: true,
+	})
 	grpcServer := grpc.NewServer(
-		grpc.Creds(credentials.NewServerTLSFromCert(&insecure.Cert)),
+		grpc.Creds(creds),
 		grpc.UnaryInterceptor(grpc_validator.UnaryServerInterceptor()),
 		grpc.StreamInterceptor(grpc_validator.StreamServerInterceptor()),
 	)
@@ -68,7 +82,7 @@ func New(
 		gwPort:     params.GatewayPort,
 		grpcServer: grpcServer,
 		httpServer: &http.Server{
-			Addr: fmt.Sprintf("%s:%s", params.Addr, params.GatewayPort),
+			Addr: fmt.Sprintf(":%s", params.GatewayPort),
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{insecure.Cert},
 			},
@@ -87,14 +101,15 @@ func (s *Server) Start(ctx context.Context) error {
 		OrigName:     true,
 	}
 
-	addr := fmt.Sprintf("%s:%s", s.addr, s.port)
-	lis, err := net.Listen("tcp", addr)
+	listenAddr := fmt.Sprintf(":%s", s.port)
+	addrport := fmt.Sprintf("%s:%s", s.addr, s.port)
+	lis, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		return errors.Wrapf(err, "failed to listen on %s", addr)
+		return errors.Wrapf(err, "failed to listen on %s", listenAddr)
 	}
 
 	// Serve gRPC Server
-	s.logger.Infof("Serving gRPC on https://%s", addr)
+	s.logger.Infof("Serving gRPC on https://%s", addrport)
 	go func() {
 		err := s.grpcServer.Serve(lis)
 		if err != nil {
@@ -104,7 +119,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// See https://github.com/grpc/grpc/blob/master/doc/naming.md
 	// for gRPC naming standard information.
-	dialAddr := fmt.Sprintf("passthrough://localhost/%s", addr)
+	dialAddr := fmt.Sprintf("passthrough://localhost/%s", addrport)
 	conn, err := grpc.DialContext(
 		ctx,
 		dialAddr,

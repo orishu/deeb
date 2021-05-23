@@ -7,10 +7,8 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/types"
 	pb "github.com/orishu/deeb/api"
-	"github.com/orishu/deeb/internal/insecure"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 // Client abstracts the RPCs to a remote node.
@@ -31,8 +29,18 @@ type GRPCClient struct {
 
 // NewGRPCClient creates a gRPC client
 func NewGRPCClient(ctx context.Context, addr string, port string) (Client, error) {
-	conn, err := grpc.DialContext(ctx, net.JoinHostPort(addr, port),
-		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
+	/*
+		cred := credentials.NewTLS(&tls.Config{
+			ServerName: addr,
+			//		RootCAs:            insecure.CertPool,
+			InsecureSkipVerify: true,
+		})
+	*/
+	conn, err := grpc.DialContext(
+		ctx,
+		net.JoinHostPort(addr, port),
+		// grpc.WithTransportCredentials(cred),
+		grpc.WithInsecure(),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "grpc dial error %s:%s", addr, port)

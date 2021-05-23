@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/transport"
@@ -57,7 +58,13 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 		nodeID = id
 	} else if os.IsNotExist(err) {
 		var peer *nd.NodeInfo
-		nodeID, peer = findNewHighNodeID(ctx, peers, &p)
+		for attempts := 0; attempts < 3; attempts++ {
+			nodeID, peer = findNewHighNodeID(ctx, peers, &p)
+			if nodeID > 0 {
+				break
+			}
+			time.Sleep(time.Second)
+		}
 		if peer != nil {
 			err := reportNewNode(ctx, nodeID, *peer, &p)
 			if err != nil {

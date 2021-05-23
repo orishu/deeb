@@ -1,0 +1,59 @@
+package insecure
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func Test_CreateSelfSignedCertificate_PEM_key(t *testing.T) {
+	cert, err := CreateSelfSignedCertificate([]byte(keyPEM), "example.com")
+	require.NoError(t, err)
+	require.NotNil(t, cert)
+}
+
+func Test_CreateSelfSignedCertificate_openssh_key(t *testing.T) {
+	opensshKey := `-----BEGIN OPENSSH PRIVATE KEY-----
+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
+-----END OPENSSH PRIVATE KEY-----
+`
+
+	cert, err := CreateSelfSignedCertificate([]byte(opensshKey), "example.com")
+	require.NoError(t, err)
+	require.NotNil(t, cert)
+}
