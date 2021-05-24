@@ -19,7 +19,7 @@ import (
 	"github.com/rakyll/statik/fs"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+	grpcinsecure "google.golang.org/grpc/credentials/insecure"
 )
 
 // ServerParams is the group of parameters for the gRPC/HTTP server.
@@ -49,21 +49,34 @@ func New(
 	transportMgr *transport.TransportManager,
 	logger *zap.SugaredLogger,
 ) *Server {
-	certificates := make([]tls.Certificate, 0, 1)
-	if params.PrivateKey != nil {
-		cert, err := insecure.CreateSelfSignedCertificate(params.PrivateKey, params.Addr)
-		if err != nil {
-			panic(err)
+	/*
+		TODO: don't use insecure
+
+		certificates := make([]tls.Certificate, 0, 1)
+		certPool := x509.NewCertPool()
+		if params.PrivateKey != nil {
+			cert, err := insecure.CreateSelfSignedCertificate(params.PrivateKey, params.Addr)
+			if err != nil {
+				panic(err)
+			}
+			certificates = append(certificates, *cert)
+
+			parsedCert, err := x509.ParseCertificate(cert.Certificate[0])
+			if err != nil {
+				panic(err)
+			}
+			certPool.AddCert(parsedCert)
 		}
-		certificates = append(certificates, *cert)
-	}
-	creds := credentials.NewTLS(&tls.Config{
-		ServerName:         params.Addr,
-		Certificates:       certificates,
-		InsecureSkipVerify: true,
-	})
+
+		creds := credentials.NewTLS(&tls.Config{
+			ServerName:         params.Addr,
+			Certificates:       certificates,
+			RootCAs:            certPool,
+			InsecureSkipVerify: true,
+		})
+	*/
 	grpcServer := grpc.NewServer(
-		grpc.Creds(creds),
+		grpc.Creds(grpcinsecure.NewCredentials()),
 		grpc.UnaryInterceptor(grpc_validator.UnaryServerInterceptor()),
 		grpc.StreamInterceptor(grpc_validator.StreamServerInterceptor()),
 	)
@@ -123,7 +136,8 @@ func (s *Server) Start(ctx context.Context) error {
 	conn, err := grpc.DialContext(
 		ctx,
 		dialAddr,
-		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
+		//grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
+		grpc.WithInsecure(),
 		grpc.WithBlock(),
 	)
 	if err != nil {
