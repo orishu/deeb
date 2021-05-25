@@ -106,15 +106,26 @@ func Test_basic_mysql_access(t *testing.T) {
 	err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}})
 	require.NoError(t, err)
 
-	err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"})
+	prevID, err := b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 2, Addr: "localhost", Port: "10000"})
 	require.NoError(t, err)
-	err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"})
+	require.Equal(t, uint64(0), prevID)
+
+	// Upserting the same addr/port should return the previous node ID
+	// associated with them.
+	prevID, err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"})
 	require.NoError(t, err)
+	require.Equal(t, uint64(2), prevID)
+
+	prevID, err = b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"})
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), prevID)
+
 	peerInfos, err := b.LoadPeers(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(peerInfos))
-	require.Equal(t, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"}, peerInfos[0])
-	require.Equal(t, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"}, peerInfos[1])
+	require.Equal(t, 3, len(peerInfos))
+	require.Equal(t, backend.PeerInfo{NodeID: 2, Addr: "localhost", Port: "10000"}, peerInfos[0])
+	require.Equal(t, backend.PeerInfo{NodeID: 3, Addr: "localhost", Port: "10000"}, peerInfos[1])
+	require.Equal(t, backend.PeerInfo{NodeID: 4, Addr: "localhost", Port: "10001"}, peerInfos[2])
 
 	err = b.RemovePeer(ctx, 3)
 	require.NoError(t, err)

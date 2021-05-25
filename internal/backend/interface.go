@@ -37,7 +37,7 @@ type DBBackend interface {
 	RemoveSavedSnapshot(ctx context.Context, snapHandle uint64) error
 	ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	LoadPeers(ctx context.Context) ([]PeerInfo, error)
-	UpsertPeer(ctx context.Context, peerInfo PeerInfo) error
+	UpsertPeer(ctx context.Context, peerInfo PeerInfo) (uint64, error)
 	RemovePeer(ctx context.Context, nodeID uint64) error
 	ExecSQL(ctx context.Context, term uint64, idx uint64, sql string) error
 	QuerySQL(ctx context.Context, sql string) (*sql.Rows, error)

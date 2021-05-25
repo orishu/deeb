@@ -279,13 +279,27 @@ func (b *Backend) LoadPeers(ctx context.Context) ([]backend.PeerInfo, error) {
 	return res, nil
 }
 
-func (b *Backend) UpsertPeer(ctx context.Context, pi backend.PeerInfo) error {
-	query := `REPLACE INTO peers (nodeid, address, port) VALUES (?,?,?)`
-	_, err := b.mgmtdb.ExecContext(ctx, query, pi.NodeID, pi.Addr, pi.Port)
+func (b *Backend) UpsertPeer(ctx context.Context, pi backend.PeerInfo) (uint64, error) {
+	query := `SELECT nodeid FROM peers WHERE address = ? AND port = ?`
+	rows, err := b.mgmtdb.QueryContext(ctx, query, pi.Addr, pi.Port)
 	if err != nil {
-		return errors.Wrap(err, "upserting peer")
+		return 0, errors.Wrapf(err, "query when upserting address %s port %s", pi.Addr, pi.Port)
 	}
-	return nil
+	var existingNodeID uint64
+	if rows.Next() {
+		if err := rows.Scan(&existingNodeID); err != nil {
+			rows.Close()
+			return 0, errors.Wrap(err, "scanning row for existing peer node ID")
+		}
+	}
+	rows.Close()
+
+	query = `REPLACE INTO peers (nodeid, address, port) VALUES (?,?,?)`
+	_, err = b.mgmtdb.ExecContext(ctx, query, pi.NodeID, pi.Addr, pi.Port)
+	if err != nil {
+		return 0, errors.Wrap(err, "upserting peer")
+	}
+	return existingNodeID, err
 }
 
 func (b *Backend) RemovePeer(ctx context.Context, nodeID uint64) error {

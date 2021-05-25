@@ -337,11 +337,20 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 	if err != nil {
 		return err
 	}
-	err = n.backend.UpsertPeer(ctx, backend.PeerInfo{
+	prevNodeID, err := n.backend.UpsertPeer(ctx, backend.PeerInfo{
 		NodeID: cc.ID,
 		Addr:   nodeInfo.Addr,
 		Port:   nodeInfo.Port,
 	})
+
+	// If the same addr/port had a different node ID before, we clean up
+	// that node ID; We do that in the background.
+	if prevNodeID != 0 && prevNodeID != cc.ID {
+		go func() {
+			n.RemoveNode(context.Background(), prevNodeID)
+		}()
+	}
+
 	return err
 }
 
