@@ -16,6 +16,7 @@ type Client interface {
 	SendRaftMessage(ctx context.Context, msg *raftpb.Message) error
 	GetRemoteID(ctx context.Context) (uint64, error)
 	GetHighestID(ctx context.Context) (uint64, error)
+	Progress(ctx context.Context) (*pb.ProgressResponse, error)
 	AddNewPeer(ctx context.Context, nodeID uint64, addr string, port string) error
 	Close() error
 }
@@ -77,6 +78,11 @@ func (c *GRPCClient) GetHighestID(ctx context.Context) (uint64, error) {
 		return 0, err
 	}
 	return resp.Id, nil
+}
+
+// Progress fetches the Raft progress state from the remote node.
+func (c *GRPCClient) Progress(ctx context.Context) (*pb.ProgressResponse, error) {
+	return c.raftClient.Progress(ctx, &types.Empty{})
 }
 
 // AddNewPeer tells the remote node about a new joining node

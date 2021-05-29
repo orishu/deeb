@@ -2,9 +2,11 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	pb "github.com/orishu/deeb/api"
 )
 
 // InProcessRegistry is used for testing, to emulate inter-node transport
@@ -69,6 +71,11 @@ func (ic *InProcessClient) GetHighestID(ctx context.Context) (uint64, error) {
 		}
 	}
 	return maxID, nil
+}
+
+// Progress fetches the Raft progress state from the remote node.
+func (ic *InProcessClient) Progress(ctx context.Context) (*pb.ProgressResponse, error) {
+	return nil, errors.New("not implemented")
 }
 
 // AddNewPeer tells the remote node about a new joining node

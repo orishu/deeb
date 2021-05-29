@@ -35,3 +35,22 @@ func (r raftService) HighestID(context.Context, *types.Empty) (*pb.HighestIDResp
 	}
 	return &pb.HighestIDResponse{Id: maxID}, nil
 }
+
+func (r raftService) Progress(context.Context, *types.Empty) (*pb.ProgressResponse, error) {
+	status := r.node.RaftStatus()
+	resp := pb.ProgressResponse{
+		Id:          status.ID,
+		Applied:     status.Applied,
+		State:       status.SoftState.RaftState.String(),
+		ProgressMap: make(map[uint64]*pb.NodeProgress),
+	}
+	for id, progress := range status.Progress {
+		p := pb.NodeProgress{Match: progress.Match}
+		resp.ProgressMap[id] = &p
+	}
+	return &resp, nil
+}
+
+func (r raftService) CheckHealth(context.Context, *types.Empty) (*pb.CheckHealthResponse, error) {
+	return nil, nil
+}

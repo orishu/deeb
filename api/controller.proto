@@ -50,7 +50,7 @@ service ControlService {
 		option (google.api.http) = {
 			get: "/api/v1/querysql"
 		};
-	};
+	}
 
 	rpc ExecuteSQL(ExecuteSQLRequest) returns (google.protobuf.Empty) {
 		option (google.api.http) = {
@@ -70,6 +70,16 @@ service Raft {
 	rpc HighestID(google.protobuf.Empty) returns (HighestIDResponse) {
 		option (google.api.http) = {
 			get: "/api/v1/raft/highest_id"
+		};
+	}
+	rpc Progress(google.protobuf.Empty) returns (ProgressResponse) {
+		option (google.api.http) = {
+			get: "/api/v1/raft/progress"
+		};
+	}
+	rpc CheckHealth(google.protobuf.Empty) returns (CheckHealthResponse) {
+		option (google.api.http) = {
+			get: "/api/v1/raft/check_health"
 		};
 	}
 }
@@ -95,6 +105,21 @@ message GetIDResponse {
 
 message HighestIDResponse {
     	uint64 id = 1;
+}
+
+message NodeProgress {
+	uint64 match = 1;
+}
+
+message ProgressResponse {
+    	uint64 id = 1;
+	string state = 2;
+	uint64 applied = 3;
+	map<uint64, NodeProgress> progressMap = 4;
+}
+
+message CheckHealthResponse {
+	bool isLeader = 1;
 }
 
 message WriteQuery {

@@ -13,7 +13,6 @@ import (
 
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/backend/sqlite"
-	"github.com/orishu/deeb/internal/insecure"
 	"github.com/orishu/deeb/internal/lib"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/transport"
@@ -23,7 +22,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 
 	_ "github.com/orishu/deeb/internal/statik"
 )
@@ -135,13 +133,24 @@ func Test_basic_server_operation(t *testing.T) {
 	require.Equal(t, 20, result[1].col1)
 	require.Equal(t, "twenty", result[1].col2)
 
+	prog, err := client.Progress(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(123), prog.Id)
+	require.Equal(t, "StateLeader", prog.State)
+	require.Equal(t, uint64(4), prog.Applied)
+	thisProg, ok := prog.ProgressMap[123]
+	require.True(t, ok)
+	require.NotNil(t, thisProg)
+	require.Equal(t, uint64(4), thisProg.Match)
+
 	app.RequireStop()
 }
 
 func makeServiceClient(ctx context.Context, grpcPort string) (pb.ControlServiceClient, func(), error) {
 	addr := "localhost"
 	conn, err := grpc.DialContext(ctx, net.JoinHostPort(addr, grpcPort),
-		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
+		grpc.WithInsecure(),
+		//		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(insecure.CertPool, "")),
 	)
 	if err != nil {
 		return nil, func() {}, errors.Wrapf(err, "grpc dial error %s:%s", addr, grpcPort)

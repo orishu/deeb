@@ -7,11 +7,11 @@ metadata:
 spec:
   publishNotReadyAddresses: true
   ports:
-  - name: mysql
-    port: 3306
-    targetPort: mysql
   - name: controller
     port: 10000
     targetPort: 10000
+  - name: controller-gw
+    port: 11000
+    targetPort: 11000
   selector:
     {{- include "deeb.selectorLabels" . | nindent 4 }}

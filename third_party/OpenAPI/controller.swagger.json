@@ -117,6 +117,28 @@
         ]
       }
     },
+    "/api/v1/raft/check_health": {
+      "get": {
+        "operationId": "Raft_CheckHealth",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiCheckHealthResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "tags": [
+          "Raft"
+        ]
+      }
+    },
     "/api/v1/raft/highest_id": {
       "get": {
         "operationId": "Raft_HighestID",
@@ -147,6 +169,28 @@
             "description": "A successful response.",
             "schema": {
               "$ref": "#/definitions/apiGetIDResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "tags": [
+          "Raft"
+        ]
+      }
+    },
+    "/api/v1/raft/progress": {
+      "get": {
+        "operationId": "Raft_Progress",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiProgressResponse"
             }
           },
           "default": {
@@ -232,6 +276,15 @@
         }
       }
     },
+    "apiCheckHealthResponse": {
+      "type": "object",
+      "properties": {
+        "isLeader": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
     "apiExecuteSQLRequest": {
       "type": "object",
       "properties": {
@@ -255,6 +308,37 @@
         "id": {
           "type": "string",
           "format": "uint64"
+        }
+      }
+    },
+    "apiNodeProgress": {
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "apiProgressResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "state": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "progressMap": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/apiNodeProgress"
+          }
         }
       }
     },
