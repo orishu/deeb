@@ -84,6 +84,12 @@ func (ic *InProcessClient) AddNewPeer(ctx context.Context, nodeID uint64, addr s
 	return nil
 }
 
+// CheckHealth returns error if the node is not keeping up with the leader.
+// It's used for the readiness probe.
+func (ic *InProcessClient) CheckHealth(ctx context.Context) error {
+	return errors.New("not implemented")
+}
+
 // Close is part of the Client implementation.
 func (ic *InProcessClient) Close() error {
 	return nil

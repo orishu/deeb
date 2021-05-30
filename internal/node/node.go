@@ -198,6 +198,11 @@ func (n *Node) RaftStatus() raft.Status {
 	return n.raftNode.Status()
 }
 
+// GetPeerClients returns the list of peer nodes' transport clients
+func (n *Node) GetPeerClients() []transport.Client {
+	return n.peerManager.GetAllClients()
+}
+
 // WriteQuery proposes a write query to the Raft data and synchronuously
 // waits for the data to be committed.
 func (n *Node) WriteQuery(ctx context.Context, sql string) error {

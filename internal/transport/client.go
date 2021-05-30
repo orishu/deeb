@@ -18,6 +18,7 @@ type Client interface {
 	GetHighestID(ctx context.Context) (uint64, error)
 	Progress(ctx context.Context) (*pb.ProgressResponse, error)
 	AddNewPeer(ctx context.Context, nodeID uint64, addr string, port string) error
+	CheckHealth(ctx context.Context) error
 	Close() error
 }
 
@@ -92,6 +93,13 @@ func (c *GRPCClient) AddNewPeer(ctx context.Context, nodeID uint64, addr string,
 		Addr: addr,
 		Port: port,
 	})
+	return err
+}
+
+// CheckHealth returns error if the node is not keeping up with the leader.
+// It's used for the readiness probe.
+func (c *GRPCClient) CheckHealth(ctx context.Context) error {
+	_, err := c.raftClient.CheckHealth(ctx, &types.Empty{})
 	return err
 }
 

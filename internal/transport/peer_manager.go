@@ -86,6 +86,18 @@ func (pm PeerManager) Close() error {
 	return err
 }
 
+// GetAllClients returns the registered gRPC clients all known peer nodes.
+func (pm PeerManager) GetAllClients() []Client {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
+
+	clients := make([]Client, 0, len(pm.peerMap))
+	for _, peer := range pm.peerMap {
+		clients = append(clients, peer.client)
+	}
+	return clients
+}
+
 func (p Peer) close() error {
 	if p.client == nil {
 		return nil

@@ -143,6 +143,9 @@ func Test_basic_server_operation(t *testing.T) {
 	require.NotNil(t, thisProg)
 	require.Equal(t, uint64(4), thisProg.Match)
 
+	err = client.CheckHealth(ctx)
+	require.NoError(t, err)
+
 	app.RequireStop()
 }
 
