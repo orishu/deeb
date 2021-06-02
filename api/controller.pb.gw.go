@@ -201,8 +201,26 @@ func local_request_Raft_Progress_0(ctx context.Context, marshaler runtime.Marsha
 }
 
 func request_Raft_CheckHealth_0(ctx context.Context, marshaler runtime.Marshaler, client RaftClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq types.Empty
+	var protoReq CheckHealthRequest
 	var metadata runtime.ServerMetadata
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["lagThreshold"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "lagThreshold")
+	}
+
+	protoReq.LagThreshold, err = runtime.Uint64(val)
+
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "lagThreshold", err)
+	}
 
 	msg, err := client.CheckHealth(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
@@ -210,8 +228,26 @@ func request_Raft_CheckHealth_0(ctx context.Context, marshaler runtime.Marshaler
 }
 
 func local_request_Raft_CheckHealth_0(ctx context.Context, marshaler runtime.Marshaler, server RaftServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq types.Empty
+	var protoReq CheckHealthRequest
 	var metadata runtime.ServerMetadata
+
+	var (
+		val string
+		ok  bool
+		err error
+		_   = err
+	)
+
+	val, ok = pathParams["lagThreshold"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "lagThreshold")
+	}
+
+	protoReq.LagThreshold, err = runtime.Uint64(val)
+
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "lagThreshold", err)
+	}
 
 	msg, err := server.CheckHealth(ctx, &protoReq)
 	return msg, metadata, err
@@ -652,7 +688,7 @@ var (
 
 	pattern_Raft_Progress_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v1", "raft", "progress"}, "", runtime.AssumeColonVerbOpt(true)))
 
-	pattern_Raft_CheckHealth_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"api", "v1", "raft", "check_health"}, "", runtime.AssumeColonVerbOpt(true)))
+	pattern_Raft_CheckHealth_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"api", "v1", "raft", "check_health", "lagThreshold"}, "", runtime.AssumeColonVerbOpt(true)))
 )
 
 var (

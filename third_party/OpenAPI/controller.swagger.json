@@ -117,7 +117,7 @@
         ]
       }
     },
-    "/api/v1/raft/check_health": {
+    "/api/v1/raft/check_health/{lagThreshold}": {
       "get": {
         "operationId": "Raft_CheckHealth",
         "responses": {
@@ -134,6 +134,15 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "lagThreshold",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "uint64"
+          }
+        ],
         "tags": [
           "Raft"
         ]

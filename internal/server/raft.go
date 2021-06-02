@@ -56,7 +56,7 @@ func (r raftService) Progress(context.Context, *types.Empty) (*pb.ProgressRespon
 	return &resp, nil
 }
 
-func (r raftService) CheckHealth(ctx context.Context, empty *types.Empty) (*pb.CheckHealthResponse, error) {
+func (r raftService) CheckHealth(ctx context.Context, req *pb.CheckHealthRequest) (*pb.CheckHealthResponse, error) {
 	status := r.node.RaftStatus()
 	resp := pb.CheckHealthResponse{}
 	if status.SoftState.RaftState.String() == "StateLeader" {
@@ -83,15 +83,14 @@ func (r raftService) CheckHealth(ctx context.Context, empty *types.Empty) (*pb.C
 	for i := 0; i < len(peerClients); i++ {
 		if progress := <-responseChan; progress != nil && progress.State == "StateLeader" {
 			leaderResponse = progress
+			break
 		}
 	}
-	status = r.node.RaftStatus()
-	lagThreshold := uint64(20) // TODO: make it a parameter of CheckHealth
-
 	if leaderResponse == nil {
 		return nil, errors.New("did not received a Progress() response from a leader node")
 	}
-	if leaderResponse.Applied > status.Applied+lagThreshold {
+	status = r.node.RaftStatus()
+	if leaderResponse.Applied > status.Applied+req.LagThreshold {
 		return nil, fmt.Errorf("node is behind leader by %d", leaderResponse.Applied-status.Applied)
 	}
 	return &resp, nil

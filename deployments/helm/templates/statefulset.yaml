@@ -140,9 +140,23 @@ spec:
             - "-H"
             - "accept: application/json"
           failureThreshold: 3
+          successThreshold: 1
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - "--insecure"
+            - "-X"
+            - "GET"
+            - "https://localhost:11000/api/v1/raft/check_health/{{ .Values.indexLagThreshold }}"
+            - "-H"
+            - "accept: application/json"
+          failureThreshold: 3
           successThreshold: 1
+          periodSeconds: 10
           timeoutSeconds: 5
       volumes:
       - name: configurations

@@ -13,6 +13,7 @@ controllerImageTag: "latest"
 controllerImagePullPolicy: IfNotPresent
 
 replicas: 3
+indexLagThreshold: 20
 
 ## Specify password for root user
 ##

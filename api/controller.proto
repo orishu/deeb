@@ -77,9 +77,9 @@ service Raft {
 			get: "/api/v1/raft/progress"
 		};
 	}
-	rpc CheckHealth(google.protobuf.Empty) returns (CheckHealthResponse) {
+	rpc CheckHealth(CheckHealthRequest) returns (CheckHealthResponse) {
 		option (google.api.http) = {
-			get: "/api/v1/raft/check_health"
+			get: "/api/v1/raft/check_health/{lagThreshold}"
 		};
 	}
 }
@@ -116,6 +116,10 @@ message ProgressResponse {
 	string state = 2;
 	uint64 applied = 3;
 	map<uint64, NodeProgress> progressMap = 4;
+}
+
+message CheckHealthRequest {
+	uint64 lagThreshold = 1;
 }
 
 message CheckHealthResponse {

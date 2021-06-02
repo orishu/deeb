@@ -41,7 +41,7 @@ func main() {
 	flag.Parse()
 
 	sshPrivateKey, err := ioutil.ReadFile(*sshPrivateKeyFile)
-	if err != nil {
+	if err != nil && *backend != "sqlite" {
 		panic(err)
 	}
 
