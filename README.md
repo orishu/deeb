@@ -64,3 +64,7 @@ To remove persistent volumes, check the list of pvc's:
 kubectl get pvc
 ```
 You can delete them explicitly using `kubectl delete pvc/<name>`
+
+## Deeb Project Copyrights
+
+© 2020-2021 Ori Shalev All Rights Reserved
