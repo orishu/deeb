@@ -1,16 +1,10 @@
-Percona can be accessed via port 3306 on the following DNS name from within your cluster:
-{{ template "deeb.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
 
-To get your root password run:
+Wait until cluster is up, could take a few minutes.
 
-    kubectl get secret --namespace {{ .Release.Namespace }} {{ template "deeb.fullname" . }} -o jsonpath="{.data.mysql-root-password}" | base64 --decode; echo
+To connect, run:
 
-To connect to your database:
+    kubectl port-forward svc/{{ template "deeb.fullname" . }} 8080:11000 &
 
-1. Run a percona pod that you can use as a client:
-
-    kubectl run -i --tty percona-client --image=percona:ps-8.0 --restart=Never -- bash -il
-
-2. Connect using the mysql cli, then provide your password:
-    $ mysql -h {{ template "deeb.fullname" . }} -p
+Then go to
+    https://localhost:8080/openapi-ui/
 
