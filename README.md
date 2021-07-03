@@ -1,11 +1,17 @@
-# Deeb
+# What is Deeb?
 
-TODO
+Deeb is "etcd on SQL": it's a gRPC-interfaced highly available cluster of MySQL servers. It exposes RPCs for reliably running SQL commands on a group of MySQL servers, coordinated by [Raft](https://raft.github.io/) consensus protocol.
+
+Deeb's main component is a controller process/container that runs side by side with a MySQL container as its Raft storage backend.
+Deeb's Helm chart enables runing Deeb clusters on Kubernetes.
+
+# Building and Running
 
 ## Requirements
 
 * Go
 * Kubernetes
+* Helm
 
 ## Building on Mac OS X
 
