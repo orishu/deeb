@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -17,7 +16,7 @@ import (
 
 func Test_cluster_operation_with_in_process_transport(t *testing.T) {
 	logger := lib.NewDevelopmentLogger()
-	dir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	dir, err := os.MkdirTemp(".", fmt.Sprintf("%s-*", t.Name()))
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 

@@ -12,6 +12,15 @@ controllerImage: "deeb-controller"
 controllerImageTag: "latest"
 controllerImagePullPolicy: IfNotPresent
 
+# Resource limits for controller (add if missing)
+controllerResources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
 replicas: 3
 indexLagThreshold: 20
 
@@ -56,11 +65,17 @@ mysqlResources:
   requests:
     cpu: 100m
     memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
 
 sidecarResources:
   requests:
     cpu: 50m
     memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
 
 ## Node labels for pod assignment
 ## Ref: https://kubernetes.io/docs/user-guide/node-selection/

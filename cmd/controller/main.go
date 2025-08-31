@@ -4,13 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
-	"go.etcd.io/etcd/raft/v3"
 	"github.com/orishu/deeb/internal/backend/mysql"
 	"github.com/orishu/deeb/internal/backend/sqlite"
 	"github.com/orishu/deeb/internal/bootstrap"
@@ -18,6 +16,7 @@ import (
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/server"
 	"github.com/orishu/deeb/internal/transport"
+	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/grpclog"
@@ -40,7 +39,7 @@ func main() {
 
 	flag.Parse()
 
-	sshPrivateKey, err := ioutil.ReadFile(*sshPrivateKeyFile)
+	sshPrivateKey, err := os.ReadFile(*sshPrivateKeyFile)
 	if err != nil && *backend != "sqlite" {
 		panic(err)
 	}

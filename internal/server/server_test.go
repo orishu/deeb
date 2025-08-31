@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -27,7 +26,7 @@ import (
 )
 
 func Test_basic_server_operation(t *testing.T) {
-	dbdir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	dbdir, err := os.MkdirTemp(".", fmt.Sprintf("%s-*", t.Name()))
 	require.NoError(t, err)
 	defer os.RemoveAll(dbdir)
 

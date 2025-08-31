@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strconv"
@@ -47,7 +46,7 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 		return BootstrapInfo{}, err
 	}
 	if _, err := os.Stat(nodeIDFilename); err == nil {
-		data, err := ioutil.ReadFile(nodeIDFilename)
+		data, err := os.ReadFile(nodeIDFilename)
 		if err != nil {
 			return BootstrapInfo{}, errors.Wrapf(err, "reading node_id file %s", nodeIDFilename)
 		}
@@ -72,7 +71,7 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 			}
 		}
 		if nodeID > 0 {
-			err = ioutil.WriteFile(nodeIDFilename, []byte(fmt.Sprintf("%d", nodeID)), 0644)
+			err = os.WriteFile(nodeIDFilename, []byte(fmt.Sprintf("%d", nodeID)), 0644)
 			if err != nil {
 				return BootstrapInfo{}, errors.Wrapf(err, "writing node_id file %s", nodeIDFilename)
 			}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 )
 
 func Test_basic_sqlite_access(t *testing.T) {
-	dir, err := ioutil.TempDir("./testdb", fmt.Sprintf("%s-*", t.Name()))
+	dir, err := os.MkdirTemp("./testdb", fmt.Sprintf("%s-*", t.Name()))
 	defer os.RemoveAll(dir)
 
 	require.NoError(t, err)

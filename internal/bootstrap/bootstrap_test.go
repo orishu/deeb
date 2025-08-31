@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -19,7 +18,7 @@ import (
 )
 
 func Test_bootstrap_new_node_in_existing_cluster(t *testing.T) {
-	nodeIDDir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	nodeIDDir, err := os.MkdirTemp(".", fmt.Sprintf("%s-*", t.Name()))
 	require.NoError(t, err)
 	defer os.RemoveAll(nodeIDDir)
 	ctrl := gomock.NewController(t)
@@ -48,9 +47,9 @@ func Test_bootstrap_new_node_in_existing_cluster(t *testing.T) {
 }
 
 func Test_bootstrap_node_id_file_exists(t *testing.T) {
-	nodeIDDir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	nodeIDDir, err := os.MkdirTemp(".", fmt.Sprintf("%s-*", t.Name()))
 	defer os.RemoveAll(nodeIDDir)
-	err = ioutil.WriteFile(nodeIDDir+"/node_id", []byte("201"), 0644)
+	err = os.WriteFile(nodeIDDir+"/node_id", []byte("201"), 0644)
 	require.NoError(t, err)
 	ctrl := gomock.NewController(t)
 	mockClient := transport.NewMockClient(ctrl)
@@ -73,7 +72,7 @@ func Test_bootstrap_node_id_file_exists(t *testing.T) {
 }
 
 func Test_bootstrap_new_node_in_new_cluster(t *testing.T) {
-	nodeIDDir, err := ioutil.TempDir(".", fmt.Sprintf("%s-*", t.Name()))
+	nodeIDDir, err := os.MkdirTemp(".", fmt.Sprintf("%s-*", t.Name()))
 	require.NoError(t, err)
 	defer os.RemoveAll(nodeIDDir)
 	ctrl := gomock.NewController(t)

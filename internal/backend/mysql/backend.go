@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"time"
 
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -363,8 +362,8 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	pipedBytes, err := io.Copy(localStdin, remoteStdout)
 	b.logger.Infof("Piped xtrabackup bytes: %d", pipedBytes)
 	if err != nil {
-		remoteErrBytes, _ := ioutil.ReadAll(remoteStderr)
-		localErrBytes, _ := ioutil.ReadAll(localStderr)
+		remoteErrBytes, _ := io.ReadAll(remoteStderr)
+		localErrBytes, _ := io.ReadAll(localStderr)
 		msg := fmt.Sprintf("%s\n===== remote stderr =====\n%s\n===== local stderr =====\n%s", "piping backup", string(remoteErrBytes), string(localErrBytes))
 		return errors.Wrap(err, msg)
 	}
@@ -455,7 +454,7 @@ func queryInteger(ctx context.Context, db *sql.DB, query string, args ...interfa
 
 func wrapErrorAndAddStderr(err error, msg string, stderr io.Reader) error {
 	errBytes := []byte{}
-	errBytes, _ = ioutil.ReadAll(stderr)
+	errBytes, _ = io.ReadAll(stderr)
 	msg = fmt.Sprintf("%s\n===== stderr =====\n%s", msg, string(errBytes))
 	return errors.Wrap(err, msg)
 }
