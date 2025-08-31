@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/emptypb"
 	pb "github.com/orishu/deeb/api"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -64,7 +64,7 @@ func (c *GRPCClient) SendRaftMessage(ctx context.Context, msg *raftpb.Message) e
 
 // GetRemoteID fetches the node ID of the remote node.
 func (c *GRPCClient) GetRemoteID(ctx context.Context) (uint64, error) {
-	resp, err := c.raftClient.GetID(ctx, &types.Empty{})
+	resp, err := c.raftClient.GetID(ctx, &emptypb.Empty{})
 	if err != nil {
 		return 0, err
 	}
@@ -74,7 +74,7 @@ func (c *GRPCClient) GetRemoteID(ctx context.Context) (uint64, error) {
 // GetHighestID fetches the highest ID recorded by the remote node if the node
 // is the leader.
 func (c *GRPCClient) GetHighestID(ctx context.Context) (uint64, error) {
-	resp, err := c.raftClient.HighestID(ctx, &types.Empty{})
+	resp, err := c.raftClient.HighestID(ctx, &emptypb.Empty{})
 	if err != nil {
 		return 0, err
 	}
@@ -83,7 +83,7 @@ func (c *GRPCClient) GetHighestID(ctx context.Context) (uint64, error) {
 
 // Progress fetches the Raft progress state from the remote node.
 func (c *GRPCClient) Progress(ctx context.Context) (*pb.ProgressResponse, error) {
-	return c.raftClient.Progress(ctx, &types.Empty{})
+	return c.raftClient.Progress(ctx, &emptypb.Empty{})
 }
 
 // AddNewPeer tells the remote node about a new joining node

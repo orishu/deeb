@@ -426,19 +426,41 @@
     "raftpbConfState": {
       "type": "object",
       "properties": {
-        "nodes": {
+        "voters": {
           "type": "array",
           "items": {
             "type": "string",
             "format": "uint64"
-          }
+          },
+          "description": "The voters in the incoming config. (If the configuration is not joint,\nthen the outgoing config is empty)."
         },
         "learners": {
           "type": "array",
           "items": {
             "type": "string",
             "format": "uint64"
-          }
+          },
+          "description": "The learners in the incoming config."
+        },
+        "votersOutgoing": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uint64"
+          },
+          "description": "The voters in the outgoing config."
+        },
+        "learnersNext": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uint64"
+          },
+          "description": "The nodes that will become learners when the outgoing config is removed.\nThese nodes are necessarily currently in nodes_joint (or they would have\nbeen added to the incoming config right away)."
+        },
+        "autoLeave": {
+          "type": "boolean",
+          "description": "If set, the config is joint and Raft will automatically transition into\nthe final config (i.e. remove the outgoing config) when this is safe."
         }
       }
     },
@@ -468,9 +490,11 @@
       "type": "string",
       "enum": [
         "EntryNormal",
-        "EntryConfChange"
+        "EntryConfChange",
+        "EntryConfChangeV2"
       ],
-      "default": "EntryNormal"
+      "default": "EntryNormal",
+      "title": "- EntryConfChange: corresponds to pb.ConfChange\n - EntryConfChangeV2: corresponds to pb.ConfChangeV2"
     },
     "raftpbMessageType": {
       "type": "string",
@@ -495,7 +519,8 @@
         "MsgPreVote",
         "MsgPreVoteResp"
       ],
-      "default": "MsgHup"
+      "default": "MsgHup",
+      "title": "For description of different message types, see:\nhttps://pkg.go.dev/go.etcd.io/etcd/raft/v3#hdr-MessageType"
     },
     "raftpbSnapshot": {
       "type": "object",

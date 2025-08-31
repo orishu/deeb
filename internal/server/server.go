@@ -8,9 +8,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/gogo/gateway"
 	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/insecure"
 	nd "github.com/orishu/deeb/internal/node"
@@ -20,6 +19,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // ServerParams is the group of parameters for the gRPC/HTTP server.
@@ -108,11 +108,7 @@ func New(
 
 // Start starts the gRPC server
 func (s *Server) Start(ctx context.Context) error {
-	jsonpb := &gateway.JSONPb{
-		EmitDefaults: true,
-		Indent:       "  ",
-		OrigName:     true,
-	}
+	// gRPC Gateway v2 uses protojson by default with proper settings
 
 	listenAddr := fmt.Sprintf(":%s", s.port)
 	addrport := fmt.Sprintf("%s:%s", s.addr, s.port)
@@ -145,10 +141,13 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	gwmux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, jsonpb),
-		// This is necessary to get error details properly
-		// marshalled in unary requests.
-		runtime.WithProtoErrorHandler(runtime.DefaultHTTPProtoErrorHandler),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions: protojson.MarshalOptions{
+				EmitUnpopulated: true,
+				Indent:         "  ",
+				UseProtoNames:  true,
+			},
+		}),
 	)
 	err = pb.RegisterControlServiceHandler(ctx, gwmux, conn)
 	if err != nil {

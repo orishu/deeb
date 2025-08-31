@@ -11,7 +11,6 @@ import (
 
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3"
-	"github.com/golang/protobuf/proto"
 	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/pkg/errors"
@@ -217,7 +216,7 @@ func (b *Backend) GetAppliedIndex(ctx context.Context) (uint64, error) {
 
 func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState) error {
 	query := `UPDATE state SET confstate = ? WHERE rowid = 1`
-	d, err := proto.Marshal(confState)
+	d, err := confState.Marshal()
 	if err != nil {
 		return errors.Wrap(err, "marshalling conf state")
 	}

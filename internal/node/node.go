@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"time"
 
-	"go.etcd.io/etcd/raft/v3"
-	"go.etcd.io/etcd/raft/v3/raftpb"
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/orishu/deeb/internal/transport"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 // Node is the object encapsulating the Raft node.
@@ -208,7 +209,7 @@ func (n *Node) GetPeerClients() []transport.Client {
 func (n *Node) WriteQuery(ctx context.Context, sql string) error {
 	chid, ch := n.pendingWrites.GetNewChannel()
 	q := pb.WriteQuery{NodeID: n.config.ID, QueryID: uint64(chid), Sql: sql}
-	data, err := q.Marshal()
+	data, err := proto.Marshal(&q)
 	if err != nil {
 		n.pendingWrites.Remove(chid)
 		return errors.Wrapf(err, "marshaling sql %s", sql)
@@ -361,7 +362,7 @@ func (n *Node) processConfChange(ctx context.Context, cc raftpb.ConfChange) erro
 
 func (n *Node) processCommittedData(ctx context.Context, entry raftpb.Entry) error {
 	var query pb.WriteQuery
-	if err := query.Unmarshal(entry.Data); err != nil {
+	if err := proto.Unmarshal(entry.Data, &query); err != nil {
 		return errors.Wrap(err, "unmarshaling committed data")
 	}
 	err := n.backend.ExecSQL(ctx, entry.Term, entry.Index, query.Sql)

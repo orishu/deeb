@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.etcd.io/etcd/raft/v3/raftpb"
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/emptypb"
 	pb "github.com/orishu/deeb/api"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/transport"
@@ -15,22 +15,23 @@ import (
 )
 
 type raftService struct {
+	pb.UnimplementedRaftServer
 	node         *nd.Node
 	transportMgr *transport.TransportManager
 	logger       *zap.SugaredLogger
 }
 
-func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*types.Empty, error) {
+func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*emptypb.Empty, error) {
 	err := r.transportMgr.DeliverMessage(ctx, msg)
-	return &types.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
-func (r raftService) GetID(ctx context.Context, unused *types.Empty) (*pb.GetIDResponse, error) {
+func (r raftService) GetID(ctx context.Context, unused *emptypb.Empty) (*pb.GetIDResponse, error) {
 	res := pb.GetIDResponse{Id: r.node.GetID()}
 	return &res, nil
 }
 
-func (r raftService) HighestID(context.Context, *types.Empty) (*pb.HighestIDResponse, error) {
+func (r raftService) HighestID(context.Context, *emptypb.Empty) (*pb.HighestIDResponse, error) {
 	status := r.node.RaftStatus()
 	var maxID uint64
 	for id, _ := range status.Progress {
@@ -41,7 +42,7 @@ func (r raftService) HighestID(context.Context, *types.Empty) (*pb.HighestIDResp
 	return &pb.HighestIDResponse{Id: maxID}, nil
 }
 
-func (r raftService) Progress(context.Context, *types.Empty) (*pb.ProgressResponse, error) {
+func (r raftService) Progress(context.Context, *emptypb.Empty) (*pb.ProgressResponse, error) {
 	status := r.node.RaftStatus()
 	resp := pb.ProgressResponse{
 		Id:          status.ID,

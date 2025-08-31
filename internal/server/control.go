@@ -6,28 +6,30 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	pb "github.com/orishu/deeb/api"
 	nd "github.com/orishu/deeb/internal/node"
 )
 
 type controlService struct {
+	pb.UnimplementedControlServiceServer
 	node *nd.Node
 }
 
-func (c controlService) Status(context.Context, *types.Empty) (*pb.StatusResponse, error) {
+func (c controlService) Status(context.Context, *emptypb.Empty) (*pb.StatusResponse, error) {
 	resp := pb.StatusResponse{Code: pb.StatusCode_OK}
 	return &resp, nil
 }
 
-func (c controlService) AddPeer(ctx context.Context, req *pb.AddPeerRequest) (*types.Empty, error) {
+func (c controlService) AddPeer(ctx context.Context, req *pb.AddPeerRequest) (*emptypb.Empty, error) {
 	err := c.node.AddNode(ctx, req.Id, nd.NodeInfo{Addr: req.Addr, Port: req.Port})
-	return &types.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
-func (c controlService) ExecuteSQL(ctx context.Context, req *pb.ExecuteSQLRequest) (*types.Empty, error) {
+func (c controlService) ExecuteSQL(ctx context.Context, req *pb.ExecuteSQLRequest) (*emptypb.Empty, error) {
 	err := c.node.WriteQuery(ctx, req.Sql)
-	return &types.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
 func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_QuerySQLServer) error {
@@ -93,7 +95,7 @@ func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_
 			case *time.Time:
 				cells = append(cells, &pb.Row_Cell{
 					Value: &pb.Row_Cell_Ts{
-						Ts: &types.Timestamp{
+						Ts: &timestamppb.Timestamp{
 							Seconds: v.Unix(),
 							Nanos:   int32(v.UnixNano()),
 						},

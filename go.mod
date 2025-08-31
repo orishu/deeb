@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/coreos/etcd v3.3.27+incompatible
-	github.com/etcd-io/etcd v3.3.27+incompatible
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/googleapis v1.4.1

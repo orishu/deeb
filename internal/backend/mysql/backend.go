@@ -13,7 +13,6 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 	_ "github.com/go-sql-driver/mysql"
 	mysqldrv "github.com/go-sql-driver/mysql"
-	"github.com/golang/protobuf/proto"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/pkg/errors"
@@ -250,7 +249,7 @@ func (b *Backend) GetAppliedIndex(ctx context.Context) (uint64, error) {
 
 func (b *Backend) SaveConfState(ctx context.Context, confState *raftpb.ConfState) error {
 	query := `UPDATE state SET confstate = ? WHERE id = 1`
-	d, err := proto.Marshal(confState)
+	d, err := confState.Marshal()
 	if err != nil {
 		return errors.Wrap(err, "marshalling conf state")
 	}

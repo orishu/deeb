@@ -12,7 +12,6 @@ import (
 
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3"
-	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +31,7 @@ func (b *Backend) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	}
 	conf := raftpb.ConfState{}
 	if len(confBytes) > 0 {
-		err = proto.Unmarshal(confBytes, &conf)
+		err = conf.Unmarshal(confBytes)
 		if err != nil {
 			return hard, conf, errors.New("unmarshalling conf state")
 		}

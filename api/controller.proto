@@ -6,7 +6,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "github.com/coreos/etcd/raft/raftpb/raft.proto";
+import "go.etcd.io/etcd/raft/v3/raftpb/raft.proto";
 
 option go_package = "github.com/orishu/deeb/api;controller";
 

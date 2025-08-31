@@ -866,7 +866,7 @@ var File_controller_proto protoreflect.FileDescriptor
 
 const file_controller_proto_rawDesc = "" +
 	"\n" +
-	"\x10controller.proto\x12\x03api\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a-github.com/coreos/etcd/raft/raftpb/raft.proto\"5\n" +
+	"\x10controller.proto\x12\x03api\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a)go.etcd.io/etcd/raft/v3/raftpb/raft.proto\"5\n" +
 	"\x0eStatusResponse\x12#\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x0f.api.StatusCodeR\x04code\"H\n" +
 	"\x0eAddPeerRequest\x12\x0e\n" +
