@@ -4,33 +4,18 @@ package api;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
-import "google/protobuf/duration.proto";
-import "google/protobuf/field_mask.proto";
 import "google/api/annotations.proto";
-import "protoc-gen-swagger/options/annotations.proto";
-import "gogoproto/gogo.proto";
-import "github.com/mwitkow/go-proto-validators/validator.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
 import "github.com/coreos/etcd/raft/raftpb/raft.proto";
 
 option go_package = "github.com/orishu/deeb/api;controller";
 
-option (grpc.gateway.protoc_gen_swagger.options.openapiv2_swagger) = {
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 	info: {
 		version: "1.0";
 	};
 	schemes: HTTPS;
 };
-
-// Enable custom Marshal method.
-option (gogoproto.marshaler_all) = true;
-// Enable custom Unmarshal method.
-option (gogoproto.unmarshaler_all) = true;
-// Enable custom Size method (Required by Marshal and Unmarshal).
-option (gogoproto.sizer_all) = true;
-// Enable registration with golang/protobuf for the grpc-gateway.
-option (gogoproto.goproto_registration) = true;
-// Enable generation of XXX_MessageName methods for grpc-go/status.
-option (gogoproto.messagename_all) = true;
 
 service ControlService {
 	rpc Status(google.protobuf.Empty) returns (StatusResponse) {

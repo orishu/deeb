@@ -9,8 +9,8 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/etcd-io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/raft/v3"
 	_ "github.com/go-sql-driver/mysql"
 	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/golang/protobuf/proto"

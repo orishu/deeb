@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"github.com/gogo/protobuf/types"
 	pb "github.com/orishu/deeb/api"
 	"github.com/pkg/errors"

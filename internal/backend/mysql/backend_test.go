@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	internaltesting "github.com/orishu/deeb/internal/lib/testing"

@@ -5,7 +5,7 @@ import (
 )
 
 // LoggerAdapter adapts an inner zap logger to the interfaces:
-// 1. github.com/etcd-io/etcd/raft.Logger
+// 1. go.etcd.io/etcd/raft/v3.Logger
 // 2. google.golang.org/grpc/grpclog.LoggerV2
 type LoggerAdapter struct {
 	logger *zap.SugaredLogger

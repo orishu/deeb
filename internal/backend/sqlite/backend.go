@@ -9,8 +9,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/etcd-io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/raft/v3"
 	"github.com/golang/protobuf/proto"
 	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/orishu/deeb/internal/backend"

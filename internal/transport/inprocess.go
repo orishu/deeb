@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	pb "github.com/orishu/deeb/api"
 )
 

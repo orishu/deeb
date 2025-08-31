@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // RaftCallback is the callback type for incoming Raft messages.

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/etcd-io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	pb "github.com/orishu/deeb/api"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"

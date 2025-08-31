@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"github.com/orishu/deeb/internal/backend"
 )
 

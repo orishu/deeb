@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	raftpb "github.com/coreos/etcd/raft/raftpb"
+	raftpb "go.etcd.io/etcd/raft/v3/raftpb"
 	gomock "github.com/golang/mock/gomock"
 )
 

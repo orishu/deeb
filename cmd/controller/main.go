@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/etcd-io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 	"github.com/orishu/deeb/internal/backend/mysql"
 	"github.com/orishu/deeb/internal/backend/sqlite"
 	"github.com/orishu/deeb/internal/bootstrap"

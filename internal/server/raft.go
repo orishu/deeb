@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"github.com/gogo/protobuf/types"
 	pb "github.com/orishu/deeb/api"
 	nd "github.com/orishu/deeb/internal/node"
