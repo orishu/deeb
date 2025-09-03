@@ -58,8 +58,22 @@ func NewGRPCClient(ctx context.Context, addr string, port string) (Client, error
 
 // SendRaftMessage sends a Raft message through the Raft client.
 func (c *GRPCClient) SendRaftMessage(ctx context.Context, msg *raftpb.Message) error {
-	_, err := c.raftClient.Message(ctx, msg)
-	return err
+	// Serialize the raft message using etcd's marshaling
+	data, err := msg.Marshal()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal raft message")
+	}
+	
+	// Create the gRPC request
+	req := &pb.RaftMessage{Data: data}
+	
+	// Send the message via gRPC
+	_, err = c.raftClient.Message(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send raft message via gRPC")
+	}
+	
+	return nil
 }
 
 // GetRemoteID fetches the node ID of the remote node.

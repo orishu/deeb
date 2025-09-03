@@ -269,8 +269,13 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 	}
 }
 
-func (n *Node) handleRaftRPC(ctx context.Context, m *raftpb.Message) error {
+// HandleRaftMessage processes a raft message received from another node
+func (n *Node) HandleRaftMessage(ctx context.Context, m *raftpb.Message) error {
 	return n.raftNode.Step(ctx, *m)
+}
+
+func (n *Node) handleRaftRPC(ctx context.Context, m *raftpb.Message) error {
+	return n.HandleRaftMessage(ctx, m)
 }
 
 func (n *Node) saveToStorage(

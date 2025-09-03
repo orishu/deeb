@@ -8,7 +8,6 @@ package controller
 
 import (
 	context "context"
-	raftpb "go.etcd.io/etcd/raft/v3/raftpb"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -252,7 +251,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type RaftClient interface {
-	Message(ctx context.Context, in *raftpb.Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Message(ctx context.Context, in *RaftMessage, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetID(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetIDResponse, error)
 	HighestID(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HighestIDResponse, error)
 	Progress(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProgressResponse, error)
@@ -267,7 +266,7 @@ func NewRaftClient(cc grpc.ClientConnInterface) RaftClient {
 	return &raftClient{cc}
 }
 
-func (c *raftClient) Message(ctx context.Context, in *raftpb.Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *raftClient) Message(ctx context.Context, in *RaftMessage, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Raft_Message_FullMethodName, in, out, cOpts...)
@@ -321,7 +320,7 @@ func (c *raftClient) CheckHealth(ctx context.Context, in *CheckHealthRequest, op
 // All implementations must embed UnimplementedRaftServer
 // for forward compatibility.
 type RaftServer interface {
-	Message(context.Context, *raftpb.Message) (*emptypb.Empty, error)
+	Message(context.Context, *RaftMessage) (*emptypb.Empty, error)
 	GetID(context.Context, *emptypb.Empty) (*GetIDResponse, error)
 	HighestID(context.Context, *emptypb.Empty) (*HighestIDResponse, error)
 	Progress(context.Context, *emptypb.Empty) (*ProgressResponse, error)
@@ -336,7 +335,7 @@ type RaftServer interface {
 // pointer dereference when methods are called.
 type UnimplementedRaftServer struct{}
 
-func (UnimplementedRaftServer) Message(context.Context, *raftpb.Message) (*emptypb.Empty, error) {
+func (UnimplementedRaftServer) Message(context.Context, *RaftMessage) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Message not implemented")
 }
 func (UnimplementedRaftServer) GetID(context.Context, *emptypb.Empty) (*GetIDResponse, error) {
@@ -373,7 +372,7 @@ func RegisterRaftServer(s grpc.ServiceRegistrar, srv RaftServer) {
 }
 
 func _Raft_Message_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(raftpb.Message)
+	in := new(RaftMessage)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -385,7 +384,7 @@ func _Raft_Message_Handler(srv interface{}, ctx context.Context, dec func(interf
 		FullMethod: Raft_Message_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RaftServer).Message(ctx, req.(*raftpb.Message))
+		return srv.(RaftServer).Message(ctx, req.(*RaftMessage))
 	}
 	return interceptor(ctx, in, info, handler)
 }

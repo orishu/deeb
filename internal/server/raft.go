@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	pb "github.com/orishu/deeb/api"
 	nd "github.com/orishu/deeb/internal/node"
 	"github.com/orishu/deeb/internal/transport"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/zap"
 )
 
@@ -21,9 +21,19 @@ type raftService struct {
 	logger       *zap.SugaredLogger
 }
 
-func (r raftService) Message(ctx context.Context, msg *raftpb.Message) (*emptypb.Empty, error) {
-	err := r.transportMgr.DeliverMessage(ctx, msg)
-	return &emptypb.Empty{}, err
+func (r raftService) Message(ctx context.Context, req *pb.RaftMessage) (*emptypb.Empty, error) {
+	// Deserialize the raft message from the protobuf bytes using etcd's unmarshaling
+	var msg raftpb.Message
+	if err := msg.Unmarshal(req.Data); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal raft message")
+	}
+	
+	// Send the message to the node
+	if err := r.node.HandleRaftMessage(ctx, &msg); err != nil {
+		return nil, errors.Wrap(err, "failed to handle raft message")
+	}
+	
+	return &emptypb.Empty{}, nil
 }
 
 func (r raftService) GetID(ctx context.Context, unused *emptypb.Empty) (*pb.GetIDResponse, error) {

@@ -8,7 +8,6 @@ package controller
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	raftpb "go.etcd.io/etcd/raft/v3/raftpb"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -700,6 +699,52 @@ func (x *ExecuteSQLRequest) GetSql() string {
 	return ""
 }
 
+// RaftMessage represents a Raft protocol message
+// This is a simplified version of raftpb.Message for gRPC transport
+type RaftMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RaftMessage) Reset() {
+	*x = RaftMessage{}
+	mi := &file_controller_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RaftMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RaftMessage) ProtoMessage() {}
+
+func (x *RaftMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_controller_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RaftMessage.ProtoReflect.Descriptor instead.
+func (*RaftMessage) Descriptor() ([]byte, []int) {
+	return file_controller_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RaftMessage) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 type Row_Cell struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Value:
@@ -718,7 +763,7 @@ type Row_Cell struct {
 
 func (x *Row_Cell) Reset() {
 	*x = Row_Cell{}
-	mi := &file_controller_proto_msgTypes[14]
+	mi := &file_controller_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -730,7 +775,7 @@ func (x *Row_Cell) String() string {
 func (*Row_Cell) ProtoMessage() {}
 
 func (x *Row_Cell) ProtoReflect() protoreflect.Message {
-	mi := &file_controller_proto_msgTypes[14]
+	mi := &file_controller_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -866,7 +911,7 @@ var File_controller_proto protoreflect.FileDescriptor
 
 const file_controller_proto_rawDesc = "" +
 	"\n" +
-	"\x10controller.proto\x12\x03api\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a)go.etcd.io/etcd/raft/v3/raftpb/raft.proto\"5\n" +
+	"\x10controller.proto\x12\x03api\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\"5\n" +
 	"\x0eStatusResponse\x12#\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x0f.api.StatusCodeR\x04code\"H\n" +
 	"\x0eAddPeerRequest\x12\x0e\n" +
@@ -912,7 +957,9 @@ const file_controller_proto_rawDesc = "" +
 	"\x10QuerySQLResponse\x12\x1a\n" +
 	"\x03row\x18\x01 \x01(\v2\b.api.RowR\x03row\"%\n" +
 	"\x11ExecuteSQLRequest\x12\x10\n" +
-	"\x03sql\x18\x01 \x01(\tR\x03sql*\x1f\n" +
+	"\x03sql\x18\x01 \x01(\tR\x03sql\"!\n" +
+	"\vRaftMessage\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data*\x1f\n" +
 	"\n" +
 	"StatusCode\x12\x06\n" +
 	"\x02OK\x10\x00\x12\t\n" +
@@ -922,9 +969,9 @@ const file_controller_proto_rawDesc = "" +
 	"\aAddPeer\x12\x13.api.AddPeerRequest\x1a\x16.google.protobuf.Empty\"\x18\x82\xd3\xe4\x93\x02\x12:\x01*\"\r/api/v1/peers\x12S\n" +
 	"\bQuerySQL\x12\x14.api.QuerySQLRequest\x1a\x15.api.QuerySQLResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/api/v1/querysql0\x01\x12[\n" +
 	"\n" +
-	"ExecuteSQL\x12\x16.api.ExecuteSQLRequest\x1a\x16.google.protobuf.Empty\"\x1d\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/api/v1/executesql2\xb4\x03\n" +
-	"\x04Raft\x122\n" +
-	"\aMessage\x12\x0f.raftpb.Message\x1a\x16.google.protobuf.Empty\x12L\n" +
+	"ExecuteSQL\x12\x16.api.ExecuteSQLRequest\x1a\x16.google.protobuf.Empty\"\x1d\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/api/v1/executesql2\xb5\x03\n" +
+	"\x04Raft\x123\n" +
+	"\aMessage\x12\x10.api.RaftMessage\x1a\x16.google.protobuf.Empty\x12L\n" +
 	"\x05GetID\x12\x16.google.protobuf.Empty\x1a\x12.api.GetIDResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/api/v1/raft/id\x12\\\n" +
 	"\tHighestID\x12\x16.google.protobuf.Empty\x1a\x16.api.HighestIDResponse\"\x1f\x82\xd3\xe4\x93\x02\x19\x12\x17/api/v1/raft/highest_id\x12X\n" +
 	"\bProgress\x12\x16.google.protobuf.Empty\x1a\x15.api.ProgressResponse\"\x1d\x82\xd3\xe4\x93\x02\x17\x12\x15/api/v1/raft/progress\x12r\n" +
@@ -944,7 +991,7 @@ func file_controller_proto_rawDescGZIP() []byte {
 }
 
 var file_controller_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_controller_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_controller_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_controller_proto_goTypes = []any{
 	(StatusCode)(0),               // 0: api.StatusCode
 	(*StatusResponse)(nil),        // 1: api.StatusResponse
@@ -960,33 +1007,33 @@ var file_controller_proto_goTypes = []any{
 	(*QuerySQLRequest)(nil),       // 11: api.QuerySQLRequest
 	(*QuerySQLResponse)(nil),      // 12: api.QuerySQLResponse
 	(*ExecuteSQLRequest)(nil),     // 13: api.ExecuteSQLRequest
-	nil,                           // 14: api.ProgressResponse.ProgressMapEntry
-	(*Row_Cell)(nil),              // 15: api.Row.Cell
-	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),         // 17: google.protobuf.Empty
-	(*raftpb.Message)(nil),        // 18: raftpb.Message
+	(*RaftMessage)(nil),           // 14: api.RaftMessage
+	nil,                           // 15: api.ProgressResponse.ProgressMapEntry
+	(*Row_Cell)(nil),              // 16: api.Row.Cell
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),         // 18: google.protobuf.Empty
 }
 var file_controller_proto_depIdxs = []int32{
 	0,  // 0: api.StatusResponse.code:type_name -> api.StatusCode
-	14, // 1: api.ProgressResponse.progressMap:type_name -> api.ProgressResponse.ProgressMapEntry
-	15, // 2: api.Row.cells:type_name -> api.Row.Cell
+	15, // 1: api.ProgressResponse.progressMap:type_name -> api.ProgressResponse.ProgressMapEntry
+	16, // 2: api.Row.cells:type_name -> api.Row.Cell
 	10, // 3: api.QuerySQLResponse.row:type_name -> api.Row
 	5,  // 4: api.ProgressResponse.ProgressMapEntry.value:type_name -> api.NodeProgress
-	16, // 5: api.Row.Cell.ts:type_name -> google.protobuf.Timestamp
-	17, // 6: api.ControlService.Status:input_type -> google.protobuf.Empty
+	17, // 5: api.Row.Cell.ts:type_name -> google.protobuf.Timestamp
+	18, // 6: api.ControlService.Status:input_type -> google.protobuf.Empty
 	2,  // 7: api.ControlService.AddPeer:input_type -> api.AddPeerRequest
 	11, // 8: api.ControlService.QuerySQL:input_type -> api.QuerySQLRequest
 	13, // 9: api.ControlService.ExecuteSQL:input_type -> api.ExecuteSQLRequest
-	18, // 10: api.Raft.Message:input_type -> raftpb.Message
-	17, // 11: api.Raft.GetID:input_type -> google.protobuf.Empty
-	17, // 12: api.Raft.HighestID:input_type -> google.protobuf.Empty
-	17, // 13: api.Raft.Progress:input_type -> google.protobuf.Empty
+	14, // 10: api.Raft.Message:input_type -> api.RaftMessage
+	18, // 11: api.Raft.GetID:input_type -> google.protobuf.Empty
+	18, // 12: api.Raft.HighestID:input_type -> google.protobuf.Empty
+	18, // 13: api.Raft.Progress:input_type -> google.protobuf.Empty
 	7,  // 14: api.Raft.CheckHealth:input_type -> api.CheckHealthRequest
 	1,  // 15: api.ControlService.Status:output_type -> api.StatusResponse
-	17, // 16: api.ControlService.AddPeer:output_type -> google.protobuf.Empty
+	18, // 16: api.ControlService.AddPeer:output_type -> google.protobuf.Empty
 	12, // 17: api.ControlService.QuerySQL:output_type -> api.QuerySQLResponse
-	17, // 18: api.ControlService.ExecuteSQL:output_type -> google.protobuf.Empty
-	17, // 19: api.Raft.Message:output_type -> google.protobuf.Empty
+	18, // 18: api.ControlService.ExecuteSQL:output_type -> google.protobuf.Empty
+	18, // 19: api.Raft.Message:output_type -> google.protobuf.Empty
 	3,  // 20: api.Raft.GetID:output_type -> api.GetIDResponse
 	4,  // 21: api.Raft.HighestID:output_type -> api.HighestIDResponse
 	6,  // 22: api.Raft.Progress:output_type -> api.ProgressResponse
@@ -1003,7 +1050,7 @@ func file_controller_proto_init() {
 	if File_controller_proto != nil {
 		return
 	}
-	file_controller_proto_msgTypes[14].OneofWrappers = []any{
+	file_controller_proto_msgTypes[15].OneofWrappers = []any{
 		(*Row_Cell_Str)(nil),
 		(*Row_Cell_By)(nil),
 		(*Row_Cell_I64)(nil),
@@ -1018,7 +1065,7 @@ func file_controller_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controller_proto_rawDesc), len(file_controller_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

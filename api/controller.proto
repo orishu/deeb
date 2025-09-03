@@ -6,7 +6,6 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "go.etcd.io/etcd/raft/v3/raftpb/raft.proto";
 
 option go_package = "github.com/orishu/deeb/api;controller";
 
@@ -46,7 +45,7 @@ service ControlService {
 }
 
 service Raft {
-	rpc Message(raftpb.Message) returns (google.protobuf.Empty);
+	rpc Message(RaftMessage) returns (google.protobuf.Empty);
 	rpc GetID(google.protobuf.Empty) returns (GetIDResponse) {
 		option (google.api.http) = {
 			get: "/api/v1/raft/id"
@@ -142,4 +141,10 @@ message QuerySQLResponse {
 
 message ExecuteSQLRequest {
 	string sql = 1;
+};
+
+// RaftMessage represents a Raft protocol message
+// This is a simplified version of raftpb.Message for gRPC transport
+message RaftMessage {
+	bytes data = 1;
 };

@@ -1,39 +1,17 @@
 generate:
-	# Generate modern protobuf, gRPC, gRPC-Gateway, and OpenAPI output.
-	#
-	# -I declares import folders for proto imports.
-	# --go_out generates standard Go protobuf output.
-	# --go-grpc_out generates Go gRPC service code.
-	# --grpc-gateway_out generates gRPC-Gateway reverse proxy.
-	# --openapiv2_out generates OpenAPI 2.0 specification.
-	#
-	# ./api is the output directory.
+	# Generate modern protobuf, gRPC, gRPC-Gateway, and OpenAPI output
+	# Include paths for googleapis and grpc-gateway proto files
 	protoc \
 		-I api \
-		-I vendor/github.com/grpc-ecosystem/grpc-gateway/v2 \
-		-I vendor/github.com/gogo/googleapis \
-		-I vendor/github.com/gogo/protobuf \
-		-I vendor/go.etcd.io/etcd/raft/v3 \
-		-I vendor \
+		-I $$(go env GOMODCACHE)/github.com/grpc-ecosystem/grpc-gateway/v2@v2.18.0 \
+		-I $$(go env GOMODCACHE)/github.com/grpc-ecosystem/grpc-gateway@v1.16.0/third_party/googleapis \
 		--go_out=./api/ \
 		--go_opt=paths=source_relative \
-		--go_opt=Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--go_opt=Mgoogle/api/http.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--go_opt=Mgo.etcd.io/etcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
 		--go-grpc_out=./api/ \
 		--go-grpc_opt=paths=source_relative \
-		--go-grpc_opt=Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--go-grpc_opt=Mgoogle/api/http.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--go-grpc_opt=Mgo.etcd.io/etcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
 		--grpc-gateway_out=./api/ \
 		--grpc-gateway_opt=paths=source_relative \
-		--grpc-gateway_opt=Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--grpc-gateway_opt=Mgoogle/api/http.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--grpc-gateway_opt=Mgo.etcd.io/etcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
 		--openapiv2_out=third_party/OpenAPI/ \
-		--openapiv2_opt=Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--openapiv2_opt=Mgoogle/api/http.proto=google.golang.org/genproto/googleapis/api/annotations \
-		--openapiv2_opt=Mgo.etcd.io/etcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
 		api/controller.proto
 
 	# Generate static assets for OpenAPI UI
