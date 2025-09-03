@@ -1,10 +1,12 @@
 generate:
 	# Generate modern protobuf, gRPC, gRPC-Gateway, and OpenAPI output
-	# Include paths for googleapis and grpc-gateway proto files
+	# Include paths are determined dynamically from go modules
+	$(eval GRPC_GATEWAY_V2_PATH := $(shell go list -m -f '{{.Dir}}' github.com/grpc-ecosystem/grpc-gateway/v2))
+	$(eval GOOGLEAPIS_PATH := $(shell find $$(go env GOMODCACHE) -path "*/grpc-gateway*/third_party/googleapis" -type d 2>/dev/null | head -1))
 	protoc \
 		-I api \
-		-I $$(go env GOMODCACHE)/github.com/grpc-ecosystem/grpc-gateway/v2@v2.18.0 \
-		-I $$(go env GOMODCACHE)/github.com/grpc-ecosystem/grpc-gateway@v1.16.0/third_party/googleapis \
+		-I $(GRPC_GATEWAY_V2_PATH) \
+		-I $(GOOGLEAPIS_PATH) \
 		--go_out=./api/ \
 		--go_opt=paths=source_relative \
 		--go-grpc_out=./api/ \
