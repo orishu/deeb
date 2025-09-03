@@ -1,7 +1,7 @@
 FROM golang:1.21-bookworm
 RUN apt update && apt install -y sudo
-ENV APP_USER app
-ENV APP_HOME /go/app
+ENV APP_USER=app
+ENV APP_HOME=/go/app
 ARG GROUP_ID=1002
 ARG USER_ID=1002
 RUN groupadd --gid $GROUP_ID app && useradd -m -l --uid $USER_ID --gid $GROUP_ID $APP_USER

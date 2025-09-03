@@ -12,21 +12,31 @@ Deeb's Helm chart enables runing Deeb clusters on Kubernetes.
 * Go
 * Kubernetes
 * Helm
+* Protobuf (for protoc binary)
 
 ## Building on Mac OS X
 
-Cross-compiling the controller:
+Cross-compiling the controller using Docker:
 ```
-# Install cross-compiling library if not installed yet:
-brew install FiloSottile/musl-cross/musl-cros
+# for x86_64 CPUs (amd64):
 scripts/build-for-linux.sh
 
+OR
+
+# for Apple silicon (arm64):
+scripts/build-for-linux-on-apple-silicon.sh
+```
+Then,
+```
 # Move the Linux binary into the Docker build directory:
 mv controller build/controller/controller
 ```
 
 Build Docker images for the sidecar and controller:
 ```
+# If running locally with minikube, set up environment:
+eval $(minikube docker-env)
+
 cd build/sidecar
 docker build -t sidecar .
 cd ../controller
@@ -40,6 +50,12 @@ One time setup - create an ssh key for the components to use:
 ```
 kubectl create secret generic test-ssh-key --from-file=id_rsa=./test-id_rsa --from-file=id_rsa.pub=./test-id_rsa.pub
 
+```
+
+In case you did not build the images under minikube environment, you can load them so they are recognized by the local cluster:
+```
+minikube image load deeb-controller:latest
+minikube image load sidecar:latest
 ```
 
 Install using Helm:

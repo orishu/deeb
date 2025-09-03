@@ -1,6 +1,6 @@
 
-mysqlImage: "percona"
-mysqlImageTag: "ps-8.0"
+mysqlImage: "percona/percona-server"
+mysqlImageTag: "8.0"
 mysqlImagePullPolicy: IfNotPresent
 
 sidecarImage: "sidecar"

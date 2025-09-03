@@ -7,4 +7,5 @@ chown mysql:mysql /home/mysql/.ssh/*
 
 rm -f /run/nologin
 
+mkdir -p /run/sshd
 exec /usr/sbin/sshd  -e -D
