@@ -33,7 +33,7 @@ spec:
         - name: MYSQL_USER
         - name: MYSQL_DATABASE
           value: testdb
-        image: percona:ps-8.0
+        image: percona/percona-server:8.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           exec:

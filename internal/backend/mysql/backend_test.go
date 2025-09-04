@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"go.etcd.io/etcd/raft/v3/raftpb"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	internaltesting "github.com/orishu/deeb/internal/lib/testing"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 func Test_basic_mysql_access(t *testing.T) {
@@ -103,7 +103,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(4), maxIdx)
 
-	err = b.SaveConfState(ctx, &raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}})
+	err = b.SaveConfState(ctx, &raftpb.ConfState{Voters: []uint64{3, 4}, Learners: []uint64{5}})
 	require.NoError(t, err)
 
 	prevID, err := b.UpsertPeer(ctx, backend.PeerInfo{NodeID: 2, Addr: "localhost", Port: "10000"})
@@ -132,7 +132,7 @@ func Test_basic_mysql_access(t *testing.T) {
 
 	hs, cs, err := st.InitialState()
 	require.NoError(t, err)
-	require.Equal(t, raftpb.ConfState{Nodes: []uint64{3, 4}, Learners: []uint64{5}}, cs)
+	require.Equal(t, raftpb.ConfState{Voters: []uint64{3, 4}, Learners: []uint64{5}}, cs)
 	require.Equal(t, raftpb.HardState{Term: 2, Vote: 12, Commit: 101}, hs)
 
 	err = b.SaveApplied(ctx, 10, 123)
