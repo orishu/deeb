@@ -2,14 +2,15 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"time"
 
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	pb "github.com/orishu/deeb/api"
 	nd "github.com/orishu/deeb/internal/node"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type controlService struct {
@@ -101,6 +102,43 @@ func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_
 						},
 					},
 				})
+			case *sql.NullString:
+				if v.Valid {
+					cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_Str{Str: v.String}})
+				} else {
+					cells = append(cells, &pb.Row_Cell{})
+				}
+			case *sql.NullInt64:
+				if v.Valid {
+					cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_I64{I64: v.Int64}})
+				} else {
+					cells = append(cells, &pb.Row_Cell{})
+				}
+			case *sql.NullFloat64:
+				if v.Valid {
+					cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_By{By: []byte(fmt.Sprintf("%f", v.Float64))}})
+				} else {
+					cells = append(cells, &pb.Row_Cell{})
+				}
+			case *sql.NullBool:
+				if v.Valid {
+					cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_B{B: v.Bool}})
+				} else {
+					cells = append(cells, &pb.Row_Cell{})
+				}
+			case *sql.NullTime:
+				if v.Valid {
+					cells = append(cells, &pb.Row_Cell{
+						Value: &pb.Row_Cell_Ts{
+							Ts: &timestamppb.Timestamp{
+								Seconds: v.Time.Unix(),
+								Nanos:   int32(v.Time.UnixNano()),
+							},
+						},
+					})
+				} else {
+					cells = append(cells, &pb.Row_Cell{})
+				}
 			default:
 				return fmt.Errorf("unsupported scan value type: %T", v)
 			}
