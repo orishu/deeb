@@ -8,13 +8,13 @@ import (
 	"io"
 	"time"
 
-	"go.etcd.io/etcd/raft/v3/raftpb"
-	"go.etcd.io/etcd/raft/v3"
 	_ "github.com/go-sql-driver/mysql"
 	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/orishu/deeb/internal/backend"
 	"github.com/orishu/deeb/internal/lib"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/zap"
 )
 
@@ -333,7 +333,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 		return errors.Wrap(err, "unmarshaling snapshot reference")
 	}
 
-	backupCmd := "xtrabackup --backup --stream=xbstream -u root"
+	backupCmd := "xtrabackup --backup --stream=xbstream -u root -S /var/lib/mysql/mysql.sock"
 	remoteSSH, remoteStderr, err := lib.MakeSSHSession(snapRef.Addr, snapRef.SSHPort, "mysql", b.privateKey)
 	remoteStdout, err := remoteSSH.StdoutPipe()
 	if err != nil {
@@ -370,7 +370,7 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	remoteSSH.Close()
 	localSSH.Close()
 
-	prepAndMove := "bash -c 'xtrabackup --prepare --datadir=/var/lib/mysql/new -u root --target-dir=/var/lib/mysql/restore && xtrabackup --datadir=/var/lib/mysql/new --move-back --target-dir=/var/lib/mysql/restore && cd /var/lib/mysql && chown -R mysql:mysql new && chmod 755 active && rm -rf active && mv new active'"
+	prepAndMove := "bash -c 'xtrabackup --prepare --datadir=/var/lib/mysql/new -u root -S /var/lib/mysql/mysql.sock --target-dir=/var/lib/mysql/restore && xtrabackup --datadir=/var/lib/mysql/new --move-back --target-dir=/var/lib/mysql/restore -S /var/lib/mysql/mysql.sock && cd /var/lib/mysql && chown -R mysql:mysql new && chmod 755 active && rm -rf active && mv new active'"
 	err = b.runSSHCommand(prepAndMove)
 	if err != nil {
 		return errors.Wrap(err, "preparing snapshot data and moving to active directory")

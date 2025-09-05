@@ -176,7 +176,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	require.Equal(t, "localhost", snapRef.Addr)
 	require.Equal(t, sshPort, snapRef.SSHPort)
 
-	backupCommand := "xtrabackup --backup --stream=xbstream -u root"
+	backupCommand := "xtrabackup --backup --stream=xbstream -u root -S /var/lib/mysql/mysql.sock"
 	session, _, err := lib.MakeSSHSession("localhost", sshPort, "mysql", privKey)
 	require.NoError(t, err)
 
@@ -198,7 +198,7 @@ func Test_basic_mysql_access(t *testing.T) {
 	err = b.ExecSQL(ctx, 10, 5, "UPDATE unittest.table1 set col1 = 999")
 	require.NoError(t, err)
 
-	expectedCommand := "xtrabackup --backup --stream=xbstream -u root"
+	expectedCommand := "xtrabackup --backup --stream=xbstream -u root -S /var/lib/mysql/mysql.sock"
 	snapFile, err := os.Open("snap.bin")
 	defer snapFile.Close()
 

@@ -1,4 +1,4 @@
-FROM golang:1.21-bookworm
+FROM golang:1.24-bookworm
 RUN apt update && apt install -y sudo
 ENV APP_USER=app
 ENV APP_HOME=/go/app
