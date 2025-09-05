@@ -43,7 +43,16 @@ func Test_basic_mysql_access(t *testing.T) {
 
 	portForwardCloser1, err := kubeHelper.PortForward(podName, mysqlPort, 3306)
 	require.NoError(t, err)
-	defer portForwardCloser1()
+	// Create a safe closer that prevents double-close panics
+	var portForwardCloser1Safe func()
+	portForwardCloser1Safe = func() {
+		if portForwardCloser1 != nil {
+			portForwardCloser1()
+			portForwardCloser1 = nil // Prevent double close
+		}
+	}
+	defer portForwardCloser1Safe()
+	
 	portForwardCloser2, err := kubeHelper.PortForward(podName, sshPort, 22)
 	require.NoError(t, err)
 	defer portForwardCloser2()
@@ -218,7 +227,13 @@ func Test_basic_mysql_access(t *testing.T) {
 	snapRefData, err := json.Marshal(snapshotReference{Addr: "localhost", SSHPort: mockSourceSSHPort})
 	require.NoError(t, err)
 	snap2 := raftpb.Snapshot{Data: snapRefData, Metadata: snapMeta}
-	err = b.ApplySnapshot(ctx, snap2)
+	err = b.(*Backend).ApplySnapshotWithPortRecovery(ctx, snap2, func() error {
+		// Re-establish port forwarding after MySQL restart
+		portForwardCloser1Safe()
+		var err error
+		portForwardCloser1, err = kubeHelper.PortForward(podName, mysqlPort, 3306)
+		return err
+	})
 	require.NoError(t, err)
 
 	checkTable1()

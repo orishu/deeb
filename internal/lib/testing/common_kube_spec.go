@@ -13,6 +13,7 @@ data:
     datadir=/var/lib/mysql/active
     gtid_mode=ON
     enforce_gtid_consistency=ON
+    innodb_log_group_home_dir=/var/lib/mysql/active
 `
 
 // SSHSecretSpec is a common RSA key used in testing

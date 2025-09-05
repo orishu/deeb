@@ -21,12 +21,20 @@ spec:
     spec:
       initContainers:
       - command:
-        - rm
-        - -fr
-        - /var/lib/mysql/lost+found
+        - sh
+        - -c
+        - |
+          echo "Cleaning up and setting permissions for shared volume..."
+          rm -rf /var/lib/mysql/lost+found
+          mkdir -p /var/lib/mysql/active
+          chown -R 1001:1001 /var/lib/mysql/active
+          chmod -R 755 /var/lib/mysql/active
+          chown 1001:1001 /var/lib/mysql
+          chmod 755 /var/lib/mysql
+          echo "Permissions set: $(ls -la /var/lib/mysql/)"
         image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
         imagePullPolicy: {{ .Values.initImage.pullPolicy | quote }}
-        name: remove-lost-found
+        name: setup-permissions
         resources:
 {{ toYaml .Values.initResources | indent 10 }}
         volumeMounts:
@@ -36,6 +44,23 @@ spec:
       - name: {{ template "deeb.fullname" . }}
         image: "{{ .Values.mysqlImage }}:{{ .Values.mysqlImageTag }}"
         imagePullPolicy: {{ .Values.mysqlImagePullPolicy | quote }}
+        command:
+        - sh
+        - -c
+        - |
+          echo "MySQL container starting - giving time for any BLOCKED file coordination..."
+          # Give a small window for BLOCKED file to be created if snapshot restore is starting
+          sleep 2
+          
+          echo "Checking for BLOCKED file..."
+          while [ -f /var/lib/mysql/BLOCKED ]; do
+            echo "MySQL startup blocked - waiting for snapshot restore to complete..."
+            sleep 0.5
+          done
+          echo "No BLOCKED file found - proceeding with MySQL startup..."
+          
+          # Start MySQL normally
+          exec /docker-entrypoint.sh mysqld
         resources:
 {{ toYaml .Values.mysqlResources | indent 10 }}
         env:
@@ -58,6 +83,8 @@ spec:
           value: {{ default "" .Values.mysqlUser | quote }}
         - name: MYSQL_DATABASE
           value: {{ default "" .Values.mysqlDatabase | quote }}
+        - name: MYSQL_DATADIR
+          value: "/var/lib/mysql/active"
         ports:
         - containerPort: 3306
           name: mysql

@@ -11,7 +11,7 @@ RUN mkdir /home/mysql/.ssh
 COPY ssh_config /home/mysql/.ssh/config
 USER root
 
-RUN apt update && apt install -y curl lz4 openssh-client openssh-server && \
+RUN apt update && apt install -y curl lz4 openssh-client openssh-server net-tools iproute2 && \
   curl -O https://repo.percona.com/apt/percona-release_latest.generic_all.deb && \
   apt install -y gnupg2 lsb-release ./percona-release_latest.generic_all.deb && \
   apt update && \

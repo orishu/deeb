@@ -33,8 +33,27 @@ spec:
         - name: MYSQL_USER
         - name: MYSQL_DATABASE
           value: testdb
+        - name: MYSQL_DATADIR
+          value: "/var/lib/mysql/active"
         image: percona/percona-server:8.0
         imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          echo "MySQL container starting - giving time for any BLOCKED file coordination..."
+          # Give a small window for BLOCKED file to be created if snapshot restore is starting
+          sleep 2
+          
+          echo "Checking for BLOCKED file..."
+          while [ -f /var/lib/mysql/BLOCKED ]; do
+            echo "MySQL startup blocked - waiting for snapshot restore to complete..."
+            sleep 0.5
+          done
+          echo "No BLOCKED file found - proceeding with MySQL startup..."
+          
+          # Start MySQL normally
+          exec /docker-entrypoint.sh mysqld
         livenessProbe:
           exec:
             command:
@@ -96,12 +115,20 @@ spec:
       dnsPolicy: ClusterFirst
       initContainers:
       - command:
-        - rm
-        - -fr
-        - /var/lib/mysql/lost+found
+        - sh
+        - -c
+        - |
+          echo "Cleaning up and setting permissions for shared volume..."
+          rm -rf /var/lib/mysql/lost+found
+          mkdir -p /var/lib/mysql/active
+          chown -R 1001:1001 /var/lib/mysql/active
+          chmod -R 755 /var/lib/mysql/active
+          chown 1001:1001 /var/lib/mysql
+          chmod 755 /var/lib/mysql
+          echo "Permissions set: $(ls -la /var/lib/mysql/)"
         image: busybox:1.25.0
         imagePullPolicy: IfNotPresent
-        name: remove-lost-found
+        name: setup-permissions
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File

@@ -310,20 +310,41 @@ func (b *Backend) RemovePeer(ctx context.Context, nodeID uint64) error {
 }
 
 func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error {
+	return b.ApplySnapshotWithPortRecovery(ctx, snap, func() error { return nil })
+}
+
+func (b *Backend) ApplySnapshotWithPortRecovery(ctx context.Context, snap raftpb.Snapshot, recoverPortForwarding func() error) error {
+	// Ensure BLOCKED file exists to prevent MySQL from starting until restore is complete
+	b.logger.Info("Ensuring BLOCKED file exists to prevent MySQL startup...")
+	err := b.runSSHCommand("touch /var/lib/mysql/BLOCKED && echo 'BLOCKED file ready'")
+	if err != nil {
+		return errors.Wrap(err, "ensuring BLOCKED file exists")
+	}
+
 	// Before applying the snapshot, set the database to read-only.
-	_, err := b.maindb.ExecContext(ctx, "SHUTDOWN")
+	_, err = b.maindb.ExecContext(ctx, "SHUTDOWN")
 	if err != nil {
 		return errors.Wrap(err, "shutting down")
 	}
-	// Remove data dir files and chmod to 000 so mysqld restarts will crashloop until ready.
-	err = b.runSSHCommand("bash -c 'rm -rf /var/lib/mysql/active/* && chmod 000 /var/lib/mysql/active'")
+
+	// Wait for MySQL container to signal shutdown completion
+	b.logger.Info("Waiting for MySQL shutdown to complete...")
+	err = b.waitForShutdownCompletion(ctx, 30)
 	if err != nil {
-		return errors.Wrap(err, "removing old data dir and chmod-ing to 000")
+		return errors.Wrap(err, "MySQL shutdown did not complete properly")
+	}
+
+	// Remove data dir files - MySQL container will be blocked from starting
+	err = b.runSSHCommand("rm -rf /var/lib/mysql/active/*")
+	if err != nil {
+		return errors.Wrap(err, "removing old data dir")
 	}
 	success := false
 	defer func() {
 		if !success {
-			b.runSSHCommand("chmod 755 /var/lib/mysql/active && rm -rf /var/lib/mysql/active/*")
+			// Clean up on failure - remove BLOCKED file and cleanup temp directories
+			b.runSSHCommand("rm -f /var/lib/mysql/BLOCKED")
+			b.runSSHCommand("rm -rf /var/lib/mysql/restore")
 		}
 	}()
 
@@ -370,16 +391,58 @@ func (b *Backend) ApplySnapshot(ctx context.Context, snap raftpb.Snapshot) error
 	remoteSSH.Close()
 	localSSH.Close()
 
-	prepAndMove := "bash -c 'xtrabackup --prepare --datadir=/var/lib/mysql/new -u root -S /var/lib/mysql/mysql.sock --target-dir=/var/lib/mysql/restore && xtrabackup --datadir=/var/lib/mysql/new --move-back --target-dir=/var/lib/mysql/restore -S /var/lib/mysql/mysql.sock && cd /var/lib/mysql && chown -R mysql:mysql new && chmod 755 active && rm -rf active && mv new active'"
-	err = b.runSSHCommand(prepAndMove)
+	// Prepare the backup and move it directly to active directory
+	err = b.runSSHCommand("cd /var/lib/mysql && xtrabackup --prepare --target-dir=/var/lib/mysql/restore")
 	if err != nil {
-		return errors.Wrap(err, "preparing snapshot data and moving to active directory")
+		return errors.Wrap(err, "preparing xtrabackup")
 	}
 
-	err = b.waitForDatabaseToComeUp(ctx, 360)
+	// Use xtrabackup --move-back to efficiently move (not copy) the restored data
+	err = b.runSSHCommand("cd /var/lib/mysql && xtrabackup --move-back --datadir=/var/lib/mysql/active --target-dir=/var/lib/mysql/restore")
+	if err != nil {
+		return errors.Wrap(err, "moving restored data to active directory")
+	}
+
+	// Set proper permissions for MySQL access
+	err = b.runSSHCommand("chown -R 1001:1001 /var/lib/mysql/active && chmod -R 755 /var/lib/mysql/active && find /var/lib/mysql/active -type f -exec chmod 644 {} \\;")
+	if err != nil {
+		return errors.Wrap(err, "setting permissions on restored data")
+	}
+
+	// Remove BLOCKED file to allow MySQL to start with restored data
+	b.logger.Info("Removing BLOCKED file to allow MySQL to start...")
+	err = b.runSSHCommand("rm -f /var/lib/mysql/BLOCKED && echo 'BLOCKED file removed'")
+	if err != nil {
+		b.logger.Warn("Failed to remove BLOCKED file: " + err.Error())
+	}
+
+	// Give MySQL container time to detect that BLOCKED file is gone and start
+	b.logger.Info("Waiting for MySQL container to detect restored data...")
+	time.Sleep(5 * time.Second)
+
+	// Wait for MySQL process to start inside the pod before recovering port forwarding
+	b.logger.Info("Waiting for MySQL to start listening on port 3306 inside pod...")
+
+	err = b.waitForMySQLToStart(ctx, 60)
+	if err != nil {
+		// If MySQL fails to start, let's check what's in the MySQL container logs
+		b.logger.Error("MySQL failed to start. This requires checking the MySQL container logs with: kubectl logs <pod-name> -c <mysql-container-name>")
+		return errors.Wrap(err, "MySQL did not start listening inside pod")
+	}
+
+	// Recover port forwarding after MySQL shutdown/restart
+	err = recoverPortForwarding()
+	if err != nil {
+		return errors.Wrap(err, "recovering port forwarding")
+	}
+
+	err = b.waitForDatabaseToComeUpWithRecovery(ctx, 360, recoverPortForwarding)
 	if err != nil {
 		return errors.Wrap(err, "database did not come up")
 	}
+
+	// Clean up temporary restore directory
+	b.runSSHCommand("rm -rf /var/lib/mysql/restore")
 
 	success = true
 	return nil
@@ -392,10 +455,29 @@ func (b *Backend) runSSHCommand(command string) error {
 	}
 	defer localSSH.Close()
 
-	err = localSSH.Run(command)
+	localStdout, err := localSSH.StdoutPipe()
 	if err != nil {
+		return errors.Wrap(err, "creating stdout pipe")
+	}
+
+	err = localSSH.Start(command)
+	if err != nil {
+		return errors.Wrapf(err, "starting command [%s]", command)
+	}
+
+	output, err := io.ReadAll(localStdout)
+	if err != nil {
+		return errors.Wrap(err, "reading stdout")
+	}
+
+	err = localSSH.Wait()
+	if err != nil {
+		stderrBytes, _ := io.ReadAll(localStderr)
+		b.logger.Errorf("SSH command failed: %s\nSTDOUT:\n%s\nSTDERR:\n%s", command, string(output), string(stderrBytes))
 		return wrapErrorAndAddStderr(err, fmt.Sprintf("running command [%s]", command), localStderr)
 	}
+
+	b.logger.Infof("SSH command output for [%s]:\n%s", command, string(output))
 	return nil
 }
 
@@ -428,6 +510,10 @@ func (b *Backend) SSHPort() int {
 }
 
 func (b *Backend) waitForDatabaseToComeUp(ctx context.Context, attempts int) error {
+	return b.waitForDatabaseToComeUpWithRecovery(ctx, attempts, func() error { return nil })
+}
+
+func (b *Backend) waitForDatabaseToComeUpWithRecovery(ctx context.Context, attempts int, recoverPortForwarding func() error) error {
 	var err error
 	for i := 0; i < attempts; i++ {
 		err = b.innerStart(ctx, false)
@@ -437,9 +523,61 @@ func (b *Backend) waitForDatabaseToComeUp(ctx context.Context, attempts int) err
 				break
 			}
 		}
+		// Try to recover port forwarding on connection failures
+		if i > 0 && (i%5 == 0) { // Try recovery every 5 attempts to avoid spam
+			b.logger.Infof("Attempting port forwarding recovery after %d failed attempts", i+1)
+			recoveryErr := recoverPortForwarding()
+			if recoveryErr != nil {
+				b.logger.Warnf("Port forwarding recovery failed: %v", recoveryErr)
+			}
+		}
 		time.Sleep(time.Second)
 	}
 	return err
+}
+
+func (b *Backend) waitForShutdownCompletion(ctx context.Context, timeoutSeconds int) error {
+	for i := 0; i < timeoutSeconds; i++ {
+		// Try to ping MySQL - if it fails, MySQL has shut down
+		if b.maindb != nil {
+			err := b.maindb.PingContext(ctx)
+			if err != nil {
+				b.logger.Info("MySQL shutdown almost complete - database connection no longer responds")
+				// Extra few seconds to let mysql shut down even more gracefully.
+				time.Sleep(3 * time.Second)
+				b.logger.Info("MySQL shutdown probably completed")
+				return nil
+			}
+		}
+
+		b.logger.Infof("Waiting for MySQL shutdown completion, attempt %d/%d", i+1, timeoutSeconds)
+		time.Sleep(time.Second)
+	}
+	return errors.New("MySQL shutdown did not complete within timeout")
+}
+
+func (b *Backend) waitForMySQLToStart(ctx context.Context, attempts int) error {
+	for i := 0; i < attempts; i++ {
+		// Check if MySQL is listening on port 3306 inside the pod via SSH
+		// Use ss without -p flag to avoid permission issues, or check for mysqld process
+		checkCmd := "ss -tln | grep ':3306 ' || netstat -tln | grep ':3306 ' || pgrep -f mysqld"
+		err := b.runSSHCommand(checkCmd)
+		if err == nil {
+			b.logger.Info("MySQL is now listening on port 3306 inside pod")
+			return nil
+		}
+
+		// Every 10 attempts, check MySQL error logs to understand why it's not starting
+		if i > 0 && (i%10 == 0) {
+			b.logger.Infof("MySQL still not started after %d attempts, checking error logs...", i+1)
+			errorLogCmd := "tail -20 /var/log/mysql/error.log 2>/dev/null || journalctl -u mysql -n 20 2>/dev/null || echo 'No error logs found'"
+			b.runSSHCommand(errorLogCmd) // Ignore error, just for debugging
+		}
+
+		b.logger.Infof("MySQL not yet listening inside pod, attempt %d/%d", i+1, attempts)
+		time.Sleep(time.Second)
+	}
+	return errors.New("MySQL did not start listening on port 3306 within timeout")
 }
 
 func queryInteger(ctx context.Context, db *sql.DB, query string, args ...interface{}) (uint64, error) {
