@@ -45,17 +45,20 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 	if err != nil {
 		return BootstrapInfo{}, err
 	}
-	if _, err := os.Stat(nodeIDFilename); err == nil {
+	if _, err = os.Stat(nodeIDFilename); err == nil {
 		data, err := os.ReadFile(nodeIDFilename)
 		if err != nil {
 			return BootstrapInfo{}, errors.Wrapf(err, "reading node_id file %s", nodeIDFilename)
 		}
-		id, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
-		if err != nil {
-			return BootstrapInfo{}, errors.Wrapf(err, "parsing node_id file, data: %s", string(data))
+		if len(data) > 0 {
+			id, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+			if err != nil {
+				return BootstrapInfo{}, errors.Wrapf(err, "parsing node_id file, data: %s", string(data))
+			}
+			nodeID = id
 		}
-		nodeID = id
-	} else if os.IsNotExist(err) {
+	}
+	if (err == nil && nodeID == 0) || os.IsNotExist(err) {
 		var peer *nd.NodeInfo
 		for attempts := 0; attempts < 3; attempts++ {
 			nodeID, peer = findNewHighNodeID(ctx, peers, &p)
@@ -131,6 +134,10 @@ func findNewHighNodeID(ctx context.Context, peers []nd.NodeInfo, params *Params)
 			continue
 		}
 		allErrors = false
+		if activePeer.Addr == "" {
+			// Set activePeer to the first working peer
+			activePeer = peer
+		}
 		if nodeID > highestNodeID {
 			highestNodeID = nodeID
 			activePeer = peer

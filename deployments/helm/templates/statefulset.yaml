@@ -31,6 +31,8 @@ spec:
           chmod -R 755 /var/lib/mysql/active
           chown 1001:1001 /var/lib/mysql
           chmod 755 /var/lib/mysql
+          touch /var/lib/mysql/node_id
+          chmod 777 /var/lib/mysql/node_id
           echo "Permissions set: $(ls -la /var/lib/mysql/)"
         image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
         imagePullPolicy: {{ .Values.initImage.pullPolicy | quote }}

@@ -196,6 +196,9 @@ func (n *Node) GetID() uint64 {
 
 // RaftStatus returns the Raft status
 func (n *Node) RaftStatus() raft.Status {
+	if n.raftNode == nil {
+		return raft.Status{}
+	}
 	return n.raftNode.Status()
 }
 
