@@ -75,11 +75,14 @@ func main() {
 	var bootstrapProvide fx.Option
 	if *doBootstrap {
 		bootstrapProvide = fx.Provide(
-			func(p bootstrap.Params) bootstrap.BootstrapInfo {
+			func(p bootstrap.Params, logger *zap.SugaredLogger) bootstrap.BootstrapInfo {
+				logger.Infof("Fx calling bootstrap.New with params: %+v", p)
 				bsi, err := bootstrap.New(context.Background(), p)
 				if err != nil {
+					logger.Errorf("bootstrap.New failed: %v", err)
 					panic(err)
 				}
+				logger.Infof("bootstrap.New succeeded: %+v", bsi)
 				return bsi
 			},
 			func() bootstrap.GRPCPortType { return bootstrap.GRPCPortType(*gRPCPort) },
@@ -115,7 +118,9 @@ func main() {
 	}
 
 	provides := fx.Provide(
-		func(bsi bootstrap.BootstrapInfo) nd.NodeParams {
+		func(bsi bootstrap.BootstrapInfo, logger *zap.SugaredLogger) nd.NodeParams {
+			logger.Infof("Creating NodeParams from BootstrapInfo: NodeID=%d, IsNewCluster=%t, Peers=%+v", 
+				bsi.NodeID, bsi.IsNewCluster, bsi.Peers)
 			return nd.NodeParams{
 				NodeID:         bsi.NodeID,
 				AddrPort:       nd.NodeInfo{Addr: bsi.NodeName, Port: *gRPCPort},

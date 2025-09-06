@@ -139,6 +139,15 @@ func (c controlService) QuerySQL(req *pb.QuerySQLRequest, srv pb.ControlService_
 				} else {
 					cells = append(cells, &pb.Row_Cell{})
 				}
+			case *sql.RawBytes:
+				// Handle RawBytes by converting to string if it contains text, or keep as bytes
+				if v != nil && len(*v) > 0 {
+					// Try to determine if it's text or binary data
+					// For simplicity, convert to string - MySQL often returns RawBytes for VARCHAR, TEXT, etc.
+					cells = append(cells, &pb.Row_Cell{Value: &pb.Row_Cell_Str{Str: string(*v)}})
+				} else {
+					cells = append(cells, &pb.Row_Cell{})
+				}
 			default:
 				return fmt.Errorf("unsupported scan value type: %T", v)
 			}

@@ -67,16 +67,20 @@ func (b *Backend) Start(ctx context.Context) error {
 }
 
 func (b *Backend) innerStart(ctx context.Context, create bool) error {
+	b.logger.Info("Starting backend, create=", create)
 	connStr := fmt.Sprintf("root@tcp(127.0.0.1:%d)/", b.mysqlPort)
+	b.logger.Infof("opening sql connection %s", connStr)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
-		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
+		return errors.Wrapf(err, "connecting to db, string %s", connStr)
 	}
+	b.logger.Info("opened sql connection")
 	if b.maindb != nil {
 		b.maindb.Close()
 	}
 	b.maindb = db
 	if create {
+		b.logger.Info("creating tables")
 		return b.createTables(ctx)
 	}
 	return nil
@@ -84,23 +88,27 @@ func (b *Backend) innerStart(ctx context.Context, create bool) error {
 
 func (b *Backend) createTables(ctx context.Context) error {
 	query := `CREATE DATABASE IF NOT EXISTS raft`
+	b.logger.Infof("executing query %s", query)
 	_, err := b.maindb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating raft database")
 	}
 	query = `CREATE DATABASE IF NOT EXISTS mgmt`
+	b.logger.Infof("executing query %s", query)
 	_, err = b.maindb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating mgmt database")
 	}
 	connStrPrefix := fmt.Sprintf("root@tcp(127.0.0.1:%d)/", b.mysqlPort)
 	connStr := connStrPrefix + "raft"
+	b.logger.Infof("opening raft db: %s", connStr)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
 		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
 	}
 	b.raftdb = db
 	connStr = connStrPrefix + "mgmt"
+	b.logger.Infof("opening mgmt db: %s", connStr)
 	db, err = sql.Open("mysql", connStr)
 	if err != nil {
 		return errors.Wrapf(err, "connecting to db, string: %s", connStr)
@@ -115,11 +123,13 @@ func (b *Backend) createTables(ctx context.Context) error {
 			hardstate_vote INT NOT NULL,
 			hardstate_commit INT NOT NULL,
 			confstate BLOB)`
+	b.logger.Infof("executing query %s", query)
 	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating state table")
 	}
 	query = "SELECT count(*) FROM state"
+	b.logger.Infof("executing query %s", query)
 	count, err := queryInteger(ctx, b.raftdb, query)
 	if err != nil {
 		return errors.Wrap(err, "querying state table")
@@ -128,6 +138,7 @@ func (b *Backend) createTables(ctx context.Context) error {
 		query = `INSERT INTO state
 			(idx, term, hardstate_term, hardstate_vote, hardstate_commit)
 			VALUES (0, 0, 0, 0, 0)`
+		b.logger.Infof("executing query %s", query)
 		_, err = b.raftdb.ExecContext(ctx, query)
 		if err != nil {
 			return errors.Wrap(err, "creating first row of state table")
@@ -138,6 +149,7 @@ func (b *Backend) createTables(ctx context.Context) error {
 			nodeid INT PRIMARY KEY,
 			address TEXT NOT NULL,
 			port TEXT NOT NULL)`
+	b.logger.Infof("executing query %s", query)
 	_, err = b.mgmtdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating peers table")
@@ -148,6 +160,7 @@ func (b *Backend) createTables(ctx context.Context) error {
 			term INT NOT NULL,
 			type INT NOT NULL,
 			data BLOB)`
+	b.logger.Infof("executing query %s", query)
 	_, err = b.raftdb.ExecContext(ctx, query)
 	if err != nil {
 		return errors.Wrap(err, "creating entries table")

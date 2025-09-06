@@ -41,24 +41,35 @@ type BootstrapInfo struct {
 func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 	nodeIDFilename := p.DirWithNodeIDFile + "/node_id"
 	var nodeID uint64
+	p.Logger.Infof("getting peers with params %+v", p)
 	peers, err := getPeers(&p)
 	if err != nil {
+		p.Logger.Error("error getting peers", err)
 		return BootstrapInfo{}, err
 	}
+	p.Logger.Infof("peers: %+v", peers)
+	p.Logger.Infof("checking for node_id file: %s", nodeIDFilename)
 	if _, err = os.Stat(nodeIDFilename); err == nil {
+		p.Logger.Infof("node_id file exists, reading it")
 		data, err := os.ReadFile(nodeIDFilename)
 		if err != nil {
 			return BootstrapInfo{}, errors.Wrapf(err, "reading node_id file %s", nodeIDFilename)
 		}
+		p.Logger.Infof("node_id file contents: '%s' (length: %d)", string(data), len(data))
 		if len(data) > 0 {
 			id, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
 			if err != nil {
 				return BootstrapInfo{}, errors.Wrapf(err, "parsing node_id file, data: %s", string(data))
 			}
 			nodeID = id
+			p.Logger.Infof("parsed nodeID from file: %d", nodeID)
 		}
+	} else {
+		p.Logger.Infof("node_id file does not exist, err: %v", err)
 	}
+	p.Logger.Infof("before peer discovery: nodeID=%d, err=%v, condition=%t", nodeID, err, (err == nil && nodeID == 0) || os.IsNotExist(err))
 	if (err == nil && nodeID == 0) || os.IsNotExist(err) {
+		p.Logger.Infof("entering peer discovery path")
 		var peer *nd.NodeInfo
 		for attempts := 0; attempts < 3; attempts++ {
 			nodeID, peer = findNewHighNodeID(ctx, peers, &p)
@@ -79,7 +90,8 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 				return BootstrapInfo{}, errors.Wrapf(err, "writing node_id file %s", nodeIDFilename)
 			}
 		}
-	} else {
+	} else if err != nil && !os.IsNotExist(err) {
+		// Only return error if there was an actual file read error (not file not existing)
 		return BootstrapInfo{}, errors.Wrapf(err, "opening node_id file %s", nodeIDFilename)
 	}
 
@@ -87,6 +99,7 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 		return BootstrapInfo{}, errors.New("could not find node ID to use")
 	}
 
+	p.Logger.Infof("final BootstrapInfo: NodeID=%d, IsNewCluster=%t, Peers=%+v", nodeID, nodeID == 1, peers)
 	return BootstrapInfo{
 		NodeID:       nodeID,
 		IsNewCluster: nodeID == 1,
@@ -98,6 +111,7 @@ func New(ctx context.Context, p Params) (BootstrapInfo, error) {
 
 func getPeers(p *Params) ([]nd.NodeInfo, error) {
 	prefix, idx, err := nodeNameParts(p.NodeName)
+	p.Logger.Infof("node name parts: %v, %v, %v", prefix, idx, err)
 	if err != nil {
 		return nil, err
 	}

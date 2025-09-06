@@ -70,6 +70,7 @@ Start port forwarding:
 kubectl port-forward svc/mytest-deeb 8080:11000 &
 ```
 Then, web UI for RPC calls is available at https://localhost:8080/openapi-ui/
+Enter "https://localhost:8080/openapi-ui/controller.swagger.json" in the "Explore" text input.
 
 To uninstall, run:
 ```

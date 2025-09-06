@@ -144,8 +144,8 @@ func (s *Server) Start(ctx context.Context) error {
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
 			MarshalOptions: protojson.MarshalOptions{
 				EmitUnpopulated: true,
-				Indent:         "  ",
-				UseProtoNames:  true,
+				Indent:          "  ",
+				UseProtoNames:   true,
 			},
 		}),
 	)
@@ -168,7 +168,10 @@ func (s *Server) Start(ctx context.Context) error {
 	s.logger.Infof("Serving OpenAPI Documentation on https://%s/openapi-ui/", s.httpServer.Addr)
 
 	go func() {
-		s.node.Start(ctx)
+		err := s.node.Start(ctx)
+		if err != nil {
+			s.logger.Errorf("failed to start node", err)
+		}
 	}()
 
 	go func() {

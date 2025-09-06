@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
+	"strings"
+	"syscall"
 	"time"
 
 	pb "github.com/orishu/deeb/api"
@@ -57,6 +60,8 @@ func New(
 	backend backend.DBBackend,
 	logger *zap.SugaredLogger,
 ) *Node {
+	logger.Infof("Node.New called with NodeParams: NodeID=%d, IsNewCluster=%t, PotentialPeers=%+v", 
+		params.NodeID, params.IsNewCluster, params.PotentialPeers)
 	c := raft.Config{
 		ID:              params.NodeID,
 		ElectionTick:    10,
@@ -81,27 +86,99 @@ func New(
 	}
 }
 
-// Start runs the main Raft loop
-func (n *Node) Start(ctx context.Context) error {
-	n.logger.Info("starting node")
-
-	if err := n.backend.Start(ctx); err != nil {
-		return errors.Wrap(err, "starting backend")
+// isConnectionRefusedError checks if the error is due to connection refused
+func isConnectionRefusedError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	var peers []raft.Peer
+	// Check for direct syscall error
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+
+	// Check for net.OpError with connection refused
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if opErr.Err != nil && errors.Is(opErr.Err, syscall.ECONNREFUSED) {
+			return true
+		}
+	}
+
+	// Check error message as fallback
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "connection refused")
+}
+
+// startBackendWithRetry attempts to start the backend with retries for connection refused errors
+func (n *Node) startBackendWithRetry(ctx context.Context) error {
+	maxRetries := 10
+	initialDelay := 1 * time.Second
+	maxDelay := 30 * time.Second
+
+	var lastErr error
+	delay := initialDelay
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		lastErr = n.backend.Start(ctx)
+		if lastErr == nil {
+			return nil
+		}
+
+		if !isConnectionRefusedError(lastErr) {
+			return errors.Wrap(lastErr, "starting backend")
+		}
+
+		n.logger.Infof("Backend start attempt %d/%d failed with connection refused, retrying in %v: %v",
+			attempt, maxRetries, delay, lastErr)
+
+		select {
+		case <-time.After(delay):
+			// Continue to next attempt
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		// Exponential backoff with cap
+		delay = delay * 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+
+	return errors.Wrapf(lastErr, "starting backend after %d attempts", maxRetries)
+}
+
+// Start runs the main Raft loop
+func (n *Node) Start(ctx context.Context) error {
+	n.logger.Infof("starting node %+v", n)
+
+	if err := n.startBackendWithRetry(ctx); err != nil {
+		return err
+	}
+	n.logger.Info("started backend")
+
+	var thisPeer *raft.Peer
 	if n.isNewCluster {
 		b, err := json.Marshal(n.nodeInfo)
 		if err != nil {
 			return errors.Wrap(err, "marshalling nodeInfo")
 		}
-		peers = []raft.Peer{{ID: n.config.ID, Context: b}}
+		thisPeer = &raft.Peer{ID: n.config.ID, Context: b}
 	}
 	if err := n.loadStoredPeers(ctx); err != nil {
 		n.logger.Errorf("failed loading stored peers: %+v", err)
 	}
-	n.discoverPotentialPeers(ctx, n.potentialPeers)
-	n.raftNode = raft.StartNode(&n.config, peers)
+	n.logger.Infof("discovering potential peers: %+v", n.potentialPeers)
+	raftPeers, err := n.discoverPotentialPeers(ctx, n.potentialPeers)
+	if thisPeer != nil {
+		raftPeers = append(raftPeers, *thisPeer)
+	}
+	if err != nil {
+		return errors.Wrap(err, "discovering potential peers")
+	}
+	n.logger.Infof("starting raft node, peers %+v", raftPeers)
+	n.raftNode = raft.StartNode(&n.config, raftPeers)
 	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
 	go func() { n.runMainLoop(context.Background()) }()
@@ -112,8 +189,8 @@ func (n *Node) Start(ctx context.Context) error {
 func (n *Node) Restart(ctx context.Context) error {
 	n.logger.Info("restarting node")
 
-	if err := n.backend.Start(ctx); err != nil {
-		return errors.Wrap(err, "starting backend")
+	if err := n.startBackendWithRetry(ctx); err != nil {
+		return err
 	}
 	if n.isNewCluster {
 		return errors.New("cannot restart a new cluster")
@@ -274,6 +351,9 @@ func (n *Node) sendMessages(ctx context.Context, messages []raftpb.Message) {
 
 // HandleRaftMessage processes a raft message received from another node
 func (n *Node) HandleRaftMessage(ctx context.Context, m *raftpb.Message) error {
+	if n.raftNode == nil {
+		return errors.Errorf("raft not node yet set up")
+	}
 	return n.raftNode.Step(ctx, *m)
 }
 
@@ -413,7 +493,8 @@ func (n *Node) loadStoredPeers(ctx context.Context) error {
 	return nil
 }
 
-func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) {
+func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) ([]raft.Peer, error) {
+	raftPeers := []raft.Peer{}
 	for _, p := range peers {
 		c, err := n.transportMgr.CreateClient(ctx, p.Addr, p.Port)
 		if err != nil {
@@ -426,10 +507,16 @@ func (n *Node) discoverPotentialPeers(ctx context.Context, peers []NodeInfo) {
 			n.logger.Errorf("failed getting ID from potential peer %+v, %+v", p, err)
 			continue
 		}
+		b, err := json.Marshal(n.nodeInfo)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshalling nodeInfo")
+		}
+		raftPeers = append(raftPeers, raft.Peer{ID: id, Context: b})
 		n.peerManager.UpsertPeer(ctx, transport.PeerParams{
 			NodeID: id,
 			Addr:   p.Addr,
 			Port:   p.Port,
 		})
 	}
+	return raftPeers, nil
 }
