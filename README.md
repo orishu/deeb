@@ -1,9 +1,80 @@
 # What is Deeb?
 
-Deeb is "etcd on SQL": it's a gRPC-interfaced highly available cluster of MySQL servers. It exposes RPCs for reliably running SQL commands on a group of MySQL servers, coordinated by [Raft](https://raft.github.io/) consensus protocol.
+**Deeb** is a breakthrough in distributed database architecture: **"etcd on SQL"** - a highly available cluster of MySQL servers that combines the reliability of Raft consensus with the power and familiarity of SQL.
 
-Deeb's main component is a controller process/container that runs side by side with a MySQL container as its Raft storage backend.
-Deeb's Helm chart enables runing Deeb clusters on Kubernetes.
+## The Challenge
+
+Modern applications demand **both** the ACID guarantees of relational databases **and** the high availability of distributed systems. Traditional solutions force you to choose:
+- **Single MySQL instances**: Rich SQL capabilities but single points of failure
+- **MySQL replication**: Complex to manage, prone to split-brain scenarios  
+- **NoSQL systems**: High availability but limited query capabilities and eventual consistency
+
+Deeb solves this fundamental trade-off.
+
+## The Innovation
+
+Deeb implements **distributed SQL with strong consistency** by integrating:
+
+- **[Raft Consensus Protocol](https://raft.github.io/)**: Industry-proven algorithm used by etcd, Consul, and MongoDB for leader election and log replication
+- **MySQL Storage Engine**: Full SQL capabilities with ACID transactions
+- **gRPC API**: Modern, efficient inter-service communication
+- **Kubernetes-Native Design**: Cloud-native deployment with StatefulSets and Helm
+
+### Architecture Highlights
+
+- **Sidecar Pattern**: Controller processes run alongside MySQL containers, providing distributed coordination without modifying MySQL itself
+- **Consensus-Driven Operations**: Every SQL write operation goes through Raft consensus, ensuring cluster-wide consistency
+- **Streaming Query Interface**: Real-time result streaming for large datasets
+- **Automatic Failover**: Leader election and follower promotion with zero manual intervention
+- **Cross-Platform Compatibility**: Supports both MySQL and SQLite backends for development and production
+
+## Technical Depth
+
+Deeb tackles several complex distributed systems challenges:
+
+### 1. **Distributed Consensus**
+- Implements etcd's Raft v3 library for battle-tested leader election
+- Handles network partitions, node failures, and cluster membership changes
+- Ensures linearizable consistency across all operations
+
+### 2. **State Machine Replication**
+- SQL operations are replicated as Raft log entries
+- Deterministic application of database changes across all nodes
+- Snapshot and restore capabilities for efficient cluster recovery
+
+### 3. **Cloud-Native Orchestration**
+- Advanced StatefulSet configurations with ordered startup
+- Sophisticated readiness probes for distributed system health
+- Helm charts with configurable resource limits and storage classes
+
+### 4. **Protocol Integration**  
+- Custom protobuf definitions bridging Raft messages and gRPC transport
+- OpenAPI documentation with embedded Swagger UI
+- HTTP/2 gateway for RESTful access alongside native gRPC
+
+## Potential Impact
+
+Deeb represents a new category of **Consensus-Backed Relational Databases** that could transform how we build resilient applications:
+
+### For Developers
+- **Familiar SQL Interface**: No need to learn new query languages or data models
+- **Built-in High Availability**: Eliminate complex replication setup and monitoring
+- **Strong Consistency**: ACID transactions across distributed nodes
+- **Kubernetes Integration**: Deploy with a single Helm command
+
+### For Operations
+- **Automatic Recovery**: Self-healing clusters with no manual intervention
+- **Horizontal Scaling**: Add nodes dynamically to increase availability
+- **Cloud Portability**: Runs on any Kubernetes distribution
+- **Observability**: Rich metrics and health endpoints for monitoring
+
+### For the Industry
+- **Proof of Concept**: Demonstrates feasibility of Raft-coordinated SQL clusters
+- **Open Architecture**: Clean interfaces for extending to other storage engines  
+- **Research Foundation**: Platform for exploring distributed transaction protocols
+- **Educational Value**: Real-world implementation of distributed systems concepts
+
+Deeb bridges the gap between traditional RDBMS reliability and modern distributed systems scalability, offering a glimpse into the future of database infrastructure.
 
 # Building and Running
 
