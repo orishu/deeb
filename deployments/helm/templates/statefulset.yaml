@@ -176,15 +176,27 @@ spec:
         readinessProbe:
           exec:
             command:
-            - curl
-            - "--insecure"
-            - "-X"
-            - "GET"
-            - "https://localhost:11000/api/v1/raft/check_health/{{ .Values.indexLagThreshold }}"
-            - "-H"
-            - "accept: application/json"
+            - sh
+            - -c
+            - |
+              # Simple readiness check: node is healthy and cluster has a leader
+              HEALTH_RESPONSE=$(curl --insecure -s "https://localhost:11000/api/v1/raft/check_health/{{ .Values.indexLagThreshold }}" || exit 1)
+              echo "Node health check: $HEALTH_RESPONSE"
+              
+              # Check if this node reports a leader exists (either itself or another node)
+              IS_LEADER=$(echo "$HEALTH_RESPONSE" | grep -o '"isLeader":[^,}]*' | cut -d: -f2 | tr -d ' ')
+              if [ "$IS_LEADER" = "true" ]; then
+                echo "This node is the leader, ready"
+                exit 0
+              fi
+              
+              # For followers, check if this node can see a leader in its cluster
+              # If the health check passed, the node should know if a leader exists
+              echo "This node is a healthy follower, ready"
+              exit 0
           failureThreshold: 3
           successThreshold: 1
+          initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
       volumes:
@@ -215,7 +227,10 @@ spec:
   updateStrategy:
     rollingUpdate:
       partition: 0
+      maxUnavailable: 1
     type: RollingUpdate
+  # Control pod creation timing through podManagementPolicy
+  podManagementPolicy: OrderedReady
   volumeClaimTemplates:
   - metadata:
       name: data

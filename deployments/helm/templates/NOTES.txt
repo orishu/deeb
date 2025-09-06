@@ -7,5 +7,4 @@ To connect, run:
 
 Then go to
     https://localhost:8080/openapi-ui/
-and enter "https://localhost:8080/openapi-ui/controller.swagger.json" in the "Explore" text input.
 

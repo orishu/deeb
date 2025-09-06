@@ -24,6 +24,7 @@ controllerResources:
 replicas: 3
 indexLagThreshold: 20
 
+
 ## Specify password for root user
 ##
 ## Default: random 10 character string

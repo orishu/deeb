@@ -70,7 +70,14 @@ Start port forwarding:
 kubectl port-forward svc/mytest-deeb 8080:11000 &
 ```
 Then, web UI for RPC calls is available at https://localhost:8080/openapi-ui/
-Enter "https://localhost:8080/openapi-ui/controller.swagger.json" in the "Explore" text input.
+
+To invoke HTTP API from the command-line, you can use kubectl:
+```
+# Optional: aliasing "k" to the minikube "kubectl":
+alias k="minikube kubectl --"
+
+k exec mytest-deeb-0 -c mytest-deeb-controller -- curl -s -k https://localhost:11000/api/v1/raft/progress
+```
 
 To uninstall, run:
 ```
@@ -84,4 +91,4 @@ You can delete them explicitly using `kubectl delete pvc/<name>`
 
 ## Deeb Project Copyrights
 
-© 2020-2021 Ori Shalev All Rights Reserved
+© 2020-2025 Ori Shalev All Rights Reserved

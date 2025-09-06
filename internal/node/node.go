@@ -178,7 +178,28 @@ func (n *Node) Start(ctx context.Context) error {
 		return errors.Wrap(err, "discovering potential peers")
 	}
 	n.logger.Infof("starting raft node, peers %+v", raftPeers)
-	n.raftNode = raft.StartNode(&n.config, raftPeers)
+	
+	if n.isNewCluster {
+		// For new cluster, bootstrap initial configuration and use RestartNode
+		n.logger.Info("starting new cluster: bootstrapping initial configuration")
+		
+		// Create initial cluster configuration with this node as the only member
+		confState := raftpb.ConfState{
+			Voters: []uint64{n.config.ID},
+		}
+		
+		// Store the initial configuration
+		if err := n.backend.SaveConfState(ctx, &confState); err != nil {
+			return errors.Wrap(err, "storing initial conf state")
+		}
+		
+		n.logger.Info("starting new cluster with RestartNode")
+		n.raftNode = raft.RestartNode(&n.config)
+	} else {
+		// For joining existing cluster, use StartNode with discovered peers
+		n.logger.Info("joining existing cluster with StartNode")
+		n.raftNode = raft.StartNode(&n.config, raftPeers)
+	}
 	n.transportMgr.RegisterDestCallback(n.config.ID, n.handleRaftRPC)
 
 	go func() { n.runMainLoop(context.Background()) }()

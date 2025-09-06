@@ -44,11 +44,17 @@ func (r raftService) GetID(ctx context.Context, unused *emptypb.Empty) (*pb.GetI
 func (r raftService) HighestID(context.Context, *emptypb.Empty) (*pb.HighestIDResponse, error) {
 	status := r.node.RaftStatus()
 	var maxID uint64
+	
+	// Always include this node's ID
+	maxID = status.ID
+	
+	// Include IDs from Progress map (only populated on leader)
 	for id, _ := range status.Progress {
 		if id > maxID {
 			maxID = id
 		}
 	}
+	
 	return &pb.HighestIDResponse{Id: maxID}, nil
 }
 
